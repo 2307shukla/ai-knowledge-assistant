@@ -20,6 +20,9 @@ Sign in, hold multiple conversations, teach it facts about yourself that persist
 | **Memory** | User-authored facts injected into every conversation's system prompt |
 | **Document Q&A** | Upload a PDF; questions are answered from its contents (RAG) |
 | **Per-user isolation** | Every query is scoped to the signed-in user — no cross-account access |
+| **Rate limiting** | 20 requests/minute per user (Bucket4j token bucket), protecting the free AI quota |
+| **API documentation** | Interactive Swagger UI at `/swagger-ui.html` (springdoc-openapi) |
+| **Input sanitisation** | Control characters stripped, hard length caps, all input normalised before the model |
 
 ---
 
@@ -61,6 +64,8 @@ Browser ──▶ Spring Security (session cookie)
 ---
 
 ## API
+
+**Interactive docs:** https://ai-knowledge-assistant-378a.onrender.com/swagger-ui.html
 
 | Method | Endpoint | Description |
 |---|---|---|

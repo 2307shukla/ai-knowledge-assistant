@@ -56,13 +56,15 @@ public class MemoryController {
     @PostMapping
     public ResponseEntity<Map<String, Object>> add(@RequestBody MemoryRequest request,
                                                    Authentication authentication) {
-        String content = request.content() == null ? "" : request.content().trim();
-        if (content.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Memory cannot be empty."));
-        }
-        if (content.length() > MAX_MEMORY_LENGTH) {
+        String raw = request.content() == null ? "" : request.content();
+        if (raw.length() > MAX_MEMORY_LENGTH) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Memory too long (max " + MAX_MEMORY_LENGTH + " characters)."));
+        }
+        String content = com.abhijeet.ai_knowledge_assistant.util.InputSanitizer
+                .clean(raw, MAX_MEMORY_LENGTH);
+        if (content.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Memory cannot be empty."));
         }
 
         Memory saved = memories.save(new Memory(currentUser(authentication), content));

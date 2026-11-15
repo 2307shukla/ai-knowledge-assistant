@@ -8,6 +8,7 @@ import com.abhijeet.ai_knowledge_assistant.repository.ConversationRepository;
 import com.abhijeet.ai_knowledge_assistant.repository.UserRepository;
 import com.abhijeet.ai_knowledge_assistant.service.ChatPersistence;
 import com.abhijeet.ai_knowledge_assistant.service.ChatService;
+import com.abhijeet.ai_knowledge_assistant.util.InputSanitizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
@@ -208,13 +209,14 @@ public class ConversationController {
     }
 
     private String validate(MessageRequest request) {
-        String text = request.content() == null ? "" : request.content().trim();
-        if (text.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is empty.");
-        }
-        if (text.length() > MAX_MESSAGE_LENGTH) {
+        String raw = request.content() == null ? "" : request.content();
+        if (raw.length() > MAX_MESSAGE_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Message too long (max " + MAX_MESSAGE_LENGTH + " characters).");
+        }
+        String text = InputSanitizer.clean(raw, MAX_MESSAGE_LENGTH);
+        if (text.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message is empty.");
         }
         return text;
     }

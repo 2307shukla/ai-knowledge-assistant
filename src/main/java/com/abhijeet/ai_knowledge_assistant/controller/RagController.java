@@ -67,7 +67,12 @@ public class RagController {
 
     @GetMapping("/ask")
     public ResponseEntity<Map<String, Object>> ask(@RequestParam String question) {
-        String context = ragService.search(question);
+        String clean = com.abhijeet.ai_knowledge_assistant.util.InputSanitizer.clean(question, 500);
+        if (clean.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Question is empty."));
+        }
+
+        String context = ragService.search(clean);
 
         if (context.isBlank()) {
             return ResponseEntity.ok(Map.of(
@@ -76,7 +81,7 @@ public class RagController {
 
         String prompt = "Based on the following context, answer the question.\n\n"
                 + "Context:\n" + context + "\n\n"
-                + "Question: " + question;
+                + "Question: " + clean;
 
         String answer = chatModel.call(prompt);
         return ResponseEntity.ok(Map.of("answer", answer));

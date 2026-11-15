@@ -49,13 +49,10 @@ public class GuestChatController {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(body);
         }
 
-        String text = request.message() == null ? "" : request.message().trim();
+        String text = com.abhijeet.ai_knowledge_assistant.util.InputSanitizer
+                .clean(request.message(), 1000);
         if (text.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Message is empty."));
-        }
-        if (text.length() > 1000) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Guest messages are limited to 1000 characters."));
         }
 
         String reply;
