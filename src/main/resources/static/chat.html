@@ -128,6 +128,16 @@
     font-size: 13px; padding: 6px 0 0 4px;
   }
   .speak:hover { color: #93c5fd; }
+  .bubble.md pre { position: relative; }
+  .bubble.md pre .copy {
+    position: absolute; top: 8px; right: 8px; background: #1e293b;
+    border: 1px solid #334155; color: #c8cfdb; border-radius: 6px;
+    font-size: 11px; padding: 3px 9px; cursor: pointer;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .bubble.md pre:hover .copy { opacity: 1; }
+  .copy:hover { border-color: #475569; }
+  .meta { font-size: 11px; color: #5f6b7d; margin-top: 8px; }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
 
@@ -279,21 +289,125 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  async function streamReply(conversationId, text, onPartial) {
+    const res = await fetch('/api/conversations/' + conversationId + '/messages/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text })
+    });
+
+    if (res.status === 401) { location.href = '/login.html'; throw new Error('Not signed in'); }
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error('HTTP ' + res.status + (body ? ': ' + body : ''));
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let full = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let sep;
+      while ((sep = buffer.indexOf('\n\n')) >= 0) {
+        const raw = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+
+        let data = '';
+        for (const line of raw.split('\n')) {
+          if (line.startsWith('data:')) data += line.slice(5).trim();
+        }
+        if (!data) continue;
+
+        let parsed;
+        try { parsed = JSON.parse(data); } catch { continue; }
+
+        if (typeof parsed === 'string') {
+          full += parsed;
+          onPartial(full);
+        } else if (parsed && parsed.error) {
+          throw new Error(parsed.error);
+        }
+      }
+    }
+    return full;
+  }
+
+  function renderAssistant(bubble, text, seconds) {
+    if (window.marked && window.DOMPurify) {
+      bubble.innerHTML = DOMPurify.sanitize(marked.parse(text));
+
+      bubble.querySelectorAll('pre').forEach(pre => {
+        const code = pre.querySelector('code');
+        if (code) { try { hljs.highlightElement(code); } catch (e) { /* ignore */ } }
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy';
+        btn.textContent = 'Copy';
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code ? code.innerText : pre.innerText);
+            btn.textContent = 'Copied';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+          } catch (e) { btn.textContent = 'Failed'; }
+        });
+        pre.appendChild(btn);
+      });
+    } else {
+      bubble.textContent = text;
+    }
+
+    const speak = document.createElement('button');
+    speak.type = 'button';
+    speak.className = 'speak';
+    speak.textContent = '🔊';
+    speak.title = 'Read aloud';
+    speak.addEventListener('click', () => speakText(text));
+    bubble.appendChild(speak);
+
+    if (seconds != null) {
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = '⏱ ' + seconds.toFixed(1) + 's';
+      bubble.appendChild(meta);
+    }
+  }
+
   async function sendMessage(text) {
     if (!text || !currentId) return;
     appendMessage('user', text);
+
+    const box = document.getElementById('messages');
+    const welcome = box.querySelector('.welcome');
+    if (welcome) welcome.remove();
+
+    const row = document.createElement('div');
+    row.className = 'msg assistant';
+    row.innerHTML = '<div class="avatar">AI</div><div class="bubble md"></div>';
+    box.appendChild(row);
+    const bubble = row.querySelector('.bubble');
+    box.scrollTop = box.scrollHeight;
+
     const send = document.getElementById('send');
     send.disabled = true;
+    const started = performance.now();
+    let full = '';
+
     try {
-      const data = await api('/api/conversations/' + currentId + '/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text })
+      full = await streamReply(currentId, text, partial => {
+        full = partial;
+        bubble.textContent = partial;
+        box.scrollTop = box.scrollHeight;
       });
-      appendMessage('assistant', data.reply);
+      renderAssistant(bubble, full, (performance.now() - started) / 1000);
       await refreshConversations();
     } catch (e) {
-      appendMessage('assistant', 'Error: ' + e.message);
+      renderAssistant(bubble, full || ('Error: ' + e.message), null);
     } finally {
       send.disabled = false;
     }
