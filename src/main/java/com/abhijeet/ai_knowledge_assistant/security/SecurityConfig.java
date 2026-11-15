@@ -30,8 +30,10 @@ public class SecurityConfig {
                                 "/", "/index.html", "/login.html", "/register.html",
                                 "/api/auth/**", "/api/guest/**",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**",
+                                "/actuator/health", "/actuator/info",
                                 "/css/**", "/js/**", "/favicon.ico", "/error")
                         .permitAll()
+                        .requestMatchers("/admin.html", "/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginPage("/login.html")

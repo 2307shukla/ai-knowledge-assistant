@@ -26,6 +26,10 @@ public class User {
     @Column(length = 80)
     private String displayName;
 
+    /** USER or ADMIN. Enforced by Spring Security, not by the UI. */
+    @Column(nullable = false, length = 20)
+    private String role = "USER";
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -64,6 +68,14 @@ public class User {
 
     public void setDisplayName(String displayName) {
         this.displayName = displayName;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public Instant getCreatedAt() {

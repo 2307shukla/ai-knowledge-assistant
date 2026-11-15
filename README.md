@@ -1,73 +1,154 @@
 # AI Knowledge Assistant
 
-A Claude-style AI chat application built with **Spring Boot 3**, **Spring AI** and **Spring Security**, running on **Google Gemini's free tier**.
+![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)
+![Java](https://img.shields.io/badge/Java-21-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.5-6DB33F)
+![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0-6DB33F)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-Sign in, hold multiple conversations, teach it facts about yourself that persist across chats, and ask questions about uploaded documents.
+A production-shaped AI chat application built with **Java 21**, **Spring Boot 3**, **Spring AI** and **Spring Security** — streamed responses, per-user history, persistent memory, document Q&A and admin analytics. Runs entirely on free-tier infrastructure.
 
 **Live demo:** https://ai-knowledge-assistant-378a.onrender.com
 
-[![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml)
+| Account | Username | Password | Role |
+|---|---|---|---|
+| Demo user | `demo` | `demo123` | USER |
+| Administrator | `admin` | `admin123` | ADMIN |
 
-> **Demo account:** `demo` / `demo123`
-
----
-
-## Features
-
-| Feature | Detail |
-|---|---|
-| **Authentication** | Spring Security form login, BCrypt password hashing, self-registration |
-| **Conversations** | Multiple chat threads per user, auto-titled from the first message |
-| **History** | Full message history per conversation, restored on reload |
-| **Memory** | User-authored facts injected into every conversation's system prompt |
-| **Document Q&A** | Upload a PDF; questions are answered from its contents (RAG) |
-| **Per-user isolation** | Every query is scoped to the signed-in user — no cross-account access |
-| **Rate limiting** | 20 requests/minute per user (Bucket4j token bucket), protecting the free AI quota |
-| **API documentation** | Interactive Swagger UI at `/swagger-ui.html` (springdoc-openapi) |
-| **Input sanitisation** | Control characters stripped, hard length caps, all input normalised before the model |
+> Free tier sleeps after ~15 minutes. The first request can take up to a minute to wake.
 
 ---
 
-## How memory works
+## Why this project exists
 
-Claude-style memory, but **explicit rather than inferred**.
+Most "AI chatbot" portfolio projects are a text box wired to an API key. That demonstrates an API call, not engineering.
 
-- The user adds facts in the sidebar: *"Prefers short bullet answers"*, *"Works with Pega and Java"*.
-- Those facts are stored per user and prepended to the system prompt on every request.
-- The user can delete any memory, and it stops being used immediately.
+This one is built around the questions that actually matter when an LLM sits inside a real application:
 
-Why not have the model summarise history automatically? Because that costs an extra API call per exchange, can drift over time, and silently captures things the user never agreed to. Explicit memory is cheaper, predictable and honest.
+- **How do you stream a response** without blocking a request thread or corrupting a JPA transaction?
+- **How do you keep users apart** so one person's chats and memories never leak into another's prompt?
+- **How do you stop a public endpoint** from being drained of paid quota by a script?
+- **How do you know the model didn't hallucinate** when it was supposed to answer from your document?
+- **What happens when the free tier goes down** or the disk resets?
 
-Within a conversation, the last 12 messages are also sent so the thread has continuity.
+Every answer is visible in the code, and the trade-offs are written down rather than hidden.
 
 ---
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    B[Browser] -->|HTTPS + session cookie| S[Spring Security]
+    S --> C[REST Controllers]
+
+    C --> CS[ChatService]
+    CS --> MEM[(Memory)]
+    CS --> HIST[(Conversation history)]
+    CS --> AI[Spring AI<br/>ChatClient]
+    AI -->|OpenAI-compatible| G[Google Gemini<br/>free tier]
+
+    C --> EXP[PDF / CSV export]
+    C --> ADM[Admin analytics]
+    C --> RAG[RAG service]
+    RAG --> VS[(Vector store<br/>JSON on disk)]
+    RAG --> AI
+
+    C --> DB[(H2 in-memory<br/>users · chats · memories)]
 ```
-Browser ──▶ Spring Security (session cookie)
-              │
-              ├─ /api/auth/**        register, current user
-              ├─ /api/conversations  list, create, delete
-              ├─ /api/conversations/{id}/messages  history, send
-              ├─ /api/memories       list, add, delete
-              └─ /api/rag/**         PDF upload + document Q&A
-                        │
-                        ▼
-                 ChatService
-                   ├─ system prompt + memories
-                   ├─ last 12 messages
-                   └─ new message
-                        │
-                        ▼
-              Gemini (OpenAI-compatible surface)
+
+**Request path for a streamed message:**
+
+1. `POST /api/conversations/{id}/messages/stream`
+2. Rate limiter checks the caller's token bucket
+3. User message persisted in its own transaction
+4. Prompt assembled: system prompt + memories + last 12 messages
+5. `ChatModel.stream()` piped through `SseEmitter`
+6. Assistant reply persisted when the stream completes
+
+---
+
+## Features
+
+| Feature | Implementation |
+|---|---|
+| **Streaming responses** | Server-Sent Events via `SseEmitter` + `ChatModel.stream()` |
+| **Authentication** | Spring Security form login, BCrypt, session cookies |
+| **Role-based access** | `ROLE_ADMIN` enforced server-side for admin pages and APIs |
+| **Conversation history** | JPA entities, per-user scoping on every query |
+| **Memory** | User-authored facts injected into the system prompt, individually deletable |
+| **Document Q&A (RAG)** | PDF → chunks → embeddings → similarity search |
+| **Hallucination guard** | Token-overlap score between answer and retrieved context |
+| **Vector persistence** | Store saved to disk, reloaded on boot without re-embedding |
+| **Structured JSON output** | `ChatClient.entity()` with a typed record |
+| **Function calling** | `@Tool` methods bound to the signed-in user per request |
+| **Guest trial** | 5 messages without an account, then a sign-up prompt |
+| **Rate limiting** | Bucket4j token bucket, 20 req/min per user or IP |
+| **Input sanitisation** | Control characters stripped, hard length caps |
+| **Global error handling** | `@RestControllerAdvice` returning readable JSON |
+| **Markdown + code highlighting** | `marked` + DOMPurify + highlight.js |
+| **Voice** | Web Speech API for input and text-to-speech output |
+| **Export** | Conversation to CSV or PDF (OpenPDF) |
+| **Health check** | `/actuator/health` |
+| **API documentation** | Swagger UI at `/swagger-ui.html` |
+| **CI** | GitHub Actions: build, test, Docker build, container smoke test |
+
+---
+
+## Quick start
+
+```bash
+# 1. Get a free Gemini key - no credit card
+#    https://aistudio.google.com/apikey
+
+export AI_API_KEY=your-key          # Windows: set AI_API_KEY=your-key
+
+# 2. Run
+./mvnw spring-boot:run
+```
+
+Open http://localhost:8080 and sign in with `demo` / `demo123`.
+
+### Or with Docker
+
+```bash
+docker build -t ai-knowledge-assistant .
+docker run -p 8080:8080 -e AI_API_KEY=your-key ai-knowledge-assistant
+```
+
+---
+
+## Configuration
+
+Everything except the key is committed:
+
+```properties
+spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai
+spring.ai.openai.api-key=${AI_API_KEY:unset}
+spring.ai.openai.chat.completions-path=/chat/completions
+spring.ai.openai.embedding.embeddings-path=/embeddings
+spring.ai.openai.chat.options.model=gemini-3.6-flash
+spring.ai.openai.embedding.options.model=gemini-embedding-001
+app.vector-store.path=${VECTOR_STORE_PATH:./data/vector-store.json}
+```
+
+> Gemini is reached through its **OpenAI-compatible** surface, so the standard Spring AI OpenAI client is used unchanged — note there is **no `/v1`** in its paths.
+
+**Provider-agnostic by design.** Any OpenAI-compatible endpoint works, including a local Ollama:
+
+```bash
+java -jar app.jar \
+  --spring.ai.openai.base-url=http://localhost:11434/v1 \
+  --spring.ai.openai.api-key=ollama \
+  --spring.ai.openai.chat.options.model=llama3.2 \
+  --spring.ai.openai.embedding.options.model=nomic-embed-text
 ```
 
 ---
 
 ## API
 
-**Interactive docs:** https://ai-knowledge-assistant-378a.onrender.com/swagger-ui.html
+Interactive docs: **https://ai-knowledge-assistant-378a.onrender.com/swagger-ui.html**
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -77,100 +158,36 @@ Browser ──▶ Spring Security (session cookie)
 | `POST` | `/api/conversations` | Create a conversation |
 | `DELETE` | `/api/conversations/{id}` | Delete a conversation |
 | `GET` | `/api/conversations/{id}/messages` | Message history |
-| `POST` | `/api/conversations/{id}/messages` | Send a message, get a reply |
-| `GET` | `/api/memories` | List saved memories |
-| `POST` | `/api/memories` | Add a memory |
-| `DELETE` | `/api/memories/{id}` | Forget a memory |
+| `POST` | `/api/conversations/{id}/messages` | Send (non-streaming) |
+| `POST` | `/api/conversations/{id}/messages/stream` | Send, streamed via SSE |
+| `GET` | `/api/conversations/{id}/export.csv` | Export conversation as CSV |
+| `GET` | `/api/conversations/{id}/export.pdf` | Export conversation as PDF |
+| `GET` / `POST` / `DELETE` | `/api/memories` | Manage memory |
 | `POST` | `/api/rag/upload` | Upload and index a PDF |
-| `GET` | `/api/rag/ask?question=...` | Answer from indexed documents |
-| `POST` | `/api/insights` | **Structured JSON** answer: summary, key points, confidence |
-| `POST` | `/api/tools/ask` | **Function calling** — the model invokes Java tools (time, memories, conversation count) |
-| `GET` | `/api/conversations/{id}/export.csv` | Export the conversation as CSV |
-| `GET` | `/api/conversations/{id}/export.pdf` | Export the conversation as PDF |
+| `GET` | `/api/rag/ask` | Answer from documents, with grounding score |
+| `POST` | `/api/insights` | Structured JSON answer |
+| `POST` | `/api/tools/ask` | Function calling |
+| `POST` | `/api/guest/chat` | Anonymous trial (5 messages) |
+| `GET` | `/api/admin/stats` | Aggregate analytics (ADMIN only) |
+| `GET` | `/actuator/health` | Health check |
+
+Unauthenticated API calls return **401 JSON**; browser navigations redirect to the login page.
 
 ### Hallucination guard
-
-Document answers are checked against the retrieved context before being trusted:
 
 ```json
 { "answer": "...", "grounded": true, "overlap": 0.89 }
 ```
 
-A token-overlap heuristic flags answers whose vocabulary doesn't appear in the
-retrieved text, returning `grounded:false` plus a warning. It catches the common
-failure — the model answering from its weights instead of the document — and
-does **not** catch a fluent answer that reuses the context's words while
-distorting meaning. It is a cheap signal, not a proof.
-
-### Structured output
-
-`/api/insights` returns a typed object rather than prose:
-
-```json
-{ "summary": "...", "keyPoints": ["...", "..."], "confidence": "medium" }
-```
-
-Spring AI generates the JSON schema instruction and deserialises the reply. If a model returns unparseable or empty structure the endpoint fails with **502** instead of returning nulls — a silent empty object is worse than an error.
-
-> Note: structured output quality is model-dependent. Small local models (e.g. `llama3.2:3b`) often fail it; Gemini handles it reliably.
-
-Unauthenticated API calls return **401 JSON**; browser navigations redirect to the login page.
+A token-overlap heuristic flags answers whose vocabulary does not appear in the retrieved context. It catches the common failure — the model answering from its weights instead of the document — and **does not** catch a fluent answer that reuses the document's words while distorting meaning. It is a cheap signal, not a proof.
 
 ---
 
-## Tech stack
+## Admin analytics
 
-| Layer | Choice |
-|---|---|
-| Language | Java 21 |
-| Framework | Spring Boot 3.3.5 |
-| Security | Spring Security 6 (form login, BCrypt) |
-| AI | Spring AI 1.0.0 |
-| Model | Google Gemini `gemini-3.6-flash` / `gemini-embedding-001` |
-| Storage | H2 in-memory + JPA |
-| Build | Maven, multi-stage Docker |
-| Hosting | Render (free tier) |
+Sign in as `admin` and open `/admin.html`.
 
-No paid dependency. No credit card anywhere.
-
----
-
-## Running locally
-
-```bash
-export AI_API_KEY=your-gemini-key     # Windows: set AI_API_KEY=your-key
-./mvnw spring-boot:run
-```
-
-Open http://localhost:8080 and sign in with `demo` / `demo123`.
-
-### Configuration
-
-```properties
-spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai
-spring.ai.openai.api-key=${AI_API_KEY:unset}
-spring.ai.openai.chat.completions-path=/chat/completions
-spring.ai.openai.embedding.embeddings-path=/embeddings
-spring.ai.openai.chat.options.model=gemini-3.6-flash
-spring.ai.openai.embedding.options.model=gemini-embedding-001
-```
-
-> Gemini is reached through its OpenAI-compatible surface, so the standard Spring AI OpenAI client is used unchanged — note there is no `/v1` in its paths.
-
----
-
-## Persistence
-
-| Data | Storage | Survives restart? |
-|---|---|---|
-| Users, conversations, memories | H2 in-memory | ❌ recreated on boot |
-| Document embeddings | JSON file (`data/vector-store.json`) | ✅ reloaded from disk, **not** re-embedded |
-
-Embeddings are the expensive part — each chunk costs an API call. The vector store is written after every index operation and loaded on startup, so a restart reuses existing vectors instead of paying to recompute them.
-
-Verified: on a cold restart the log shows `Loaded vector store from …` followed by `Vector store already populated - skipping sample indexing`, and document questions still answer correctly.
-
-> **Caveat, stated honestly:** Render's free tier has an ephemeral filesystem. This survives a restart of a running instance but **not** a redeploy or a sleep/wake cycle. For true durability, set `VECTOR_STORE_PATH` to a mounted volume, or switch to `PgVectorStore` backed by a free Postgres instance.
+Shows aggregate counts only — users, conversations, messages, memories, average messages per conversation, and a per-user table. **No message content is exposed**, and access is enforced by Spring Security, not by hiding a link.
 
 ---
 
@@ -183,16 +200,62 @@ Load-tested with 300 requests at concurrency 20 and 500 at concurrency 50:
 | 20 | 144.7 req/s | 117.7 ms | 266.1 ms | **0** |
 | 50 | 127.4 req/s | 306.4 ms | 1,115.8 ms | **0** |
 
-Throughput plateaus around 130 req/s while p95 rises ~4×, which identifies the saturation point of a single instance. Method, environment and raw numbers: [`loadtest/RESULTS.md`](loadtest/RESULTS.md).
+Throughput plateaus around 130 req/s while p95 rises ~4× — the saturation point of a single instance. Full method and raw numbers: [`loadtest/RESULTS.md`](loadtest/RESULTS.md).
+
+---
+
+## Persistence
+
+| Data | Storage | Survives restart? |
+|---|---|---|
+| Users, conversations, memories | H2 in-memory | ❌ recreated on boot |
+| Document embeddings | JSON file (`data/vector-store.json`) | ✅ reloaded, not re-embedded |
+
+Embeddings are the expensive part — each chunk costs an API call. The store is written after every index operation and reloaded on startup.
+
+> **Caveat:** Render's free tier has an ephemeral filesystem. This survives a restart of a running instance but **not** a redeploy or sleep/wake. For durability, point `VECTOR_STORE_PATH` at a mounted volume, or switch to `PgVectorStore` backed by a free Postgres instance.
+
+---
+
+## Project structure
+
+```
+src/main/java/com/abhijeet/ai_knowledge_assistant/
+├── config/        ChatClient, OpenAPI, demo data
+├── controller/    chat, auth, memory, RAG, admin, export, tools
+├── domain/        User, Conversation, ChatMessage, Memory
+├── repository/    Spring Data JPA interfaces
+├── security/      SecurityConfig, UserDetailsService, rate limiter
+├── service/       ChatService, ChatPersistence, RagService
+├── tools/         @Tool methods for function calling
+└── util/          InputSanitizer, GroundingCheck
+```
+
+---
+
+## Screenshots & demo
+
+Add your own captures — the README renders them once the files exist:
+
+```markdown
+![Landing page](docs/landing.png)
+![Chat with streaming](docs/chat.png)
+![Admin analytics](docs/admin.png)
+![Demo](docs/demo.gif)
+```
+
+To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a short clip, and save screenshots with **Win + Shift + S** into a `docs/` folder.
 
 ---
 
 ## Known limitations
 
-- **In-memory database.** Accounts, chats and memories reset when the container restarts. The demo account and sample document are recreated on boot. Persistent storage would need PostgreSQL.
-- **CSRF disabled.** The UI is a single page using JSON fetch calls. For production, use `CookieCsrfTokenRepository` and send `X-XSRF-TOKEN`.
-- **Free-tier cold start.** Render sleeps after ~15 minutes idle; the first request afterwards can take up to a minute.
-- **Public demo account.** `demo` is shared, so do not store anything private in it.
+- **H2 is in-memory.** Accounts and chats reset when the container restarts. Postgres with `pgvector` would fix both this and vector durability.
+- **CSRF is disabled** for the JSON single-page UI. Production would use `CookieCsrfTokenRepository` with an `X-XSRF-TOKEN` header.
+- **Rate limiting is per-instance.** Buckets live in memory; multiple instances would need Redis.
+- **Prompt injection is not solved.** The system prompt is server-controlled and the model has no tools that act on untrusted input, but no filter reliably prevents injection.
+- **Structured output is model-dependent.** Small models fail the schema; the endpoint returns 502 rather than nulls when that happens.
+- **Demo accounts are public** by design, so do not store anything private in them.
 
 ---
 

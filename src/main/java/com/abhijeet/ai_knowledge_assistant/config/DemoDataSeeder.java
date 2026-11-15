@@ -32,6 +32,17 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!users.existsByUsername("admin")) {
+            try {
+                User admin = new User("admin", encoder.encode("admin123"), "Administrator");
+                admin.setRole("ADMIN");
+                users.save(admin);
+                log.info("Seeded admin account (admin / admin123)");
+            } catch (Exception e) {
+                log.warn("Could not seed admin account: {}", e.getMessage());
+            }
+        }
+
         if (users.existsByUsername("demo")) {
             return;
         }
