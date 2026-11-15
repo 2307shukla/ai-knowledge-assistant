@@ -2,6 +2,7 @@ package com.abhijeet.ai_knowledge_assistant.controller;
 
 import com.abhijeet.ai_knowledge_assistant.domain.User;
 import com.abhijeet.ai_knowledge_assistant.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -21,6 +22,9 @@ public class AuthController {
 
     private final UserRepository users;
     private final PasswordEncoder encoder;
+
+    @Value("${GOOGLE_CLIENT_ID:}")
+    private String googleClientId;
 
     public AuthController(UserRepository users, PasswordEncoder encoder) {
         this.users = users;
@@ -61,6 +65,11 @@ public class AuthController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("username", saved.getUsername());
         return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/providers")
+    public Map<String, Object> providers() {
+        return Map.of("google", googleClientId != null && !googleClientId.isBlank());
     }
 
     @GetMapping("/me")

@@ -7,6 +7,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -23,7 +24,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           ClientRegistrationRepository registrations,
+                                           OAuthLoginSuccessHandler oauthSuccess) throws Exception {
+
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
@@ -57,6 +61,15 @@ public class SecurityConfig {
                 // JSON fetch calls. For production, use CookieCsrfTokenRepository
                 // and send the token in an X-XSRF-TOKEN header.
                 .csrf(csrf -> csrf.disable());
+
+        // Only wire the OAuth2 login flow when a Google client is configured.
+        if (registrations.findByRegistrationId("google") != null) {
+            http.oauth2Login(oauth -> oauth
+                    .loginPage("/login.html")
+                    .successHandler(oauthSuccess)
+                    .failureUrl("/login.html?oauthError"));
+        }
+
         return http.build();
     }
 }

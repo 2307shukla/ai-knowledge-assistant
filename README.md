@@ -74,6 +74,7 @@ flowchart LR
 |---|---|
 | **Streaming responses** | Server-Sent Events via `SseEmitter` + `ChatModel.stream()` |
 | **Authentication** | Spring Security form login, BCrypt, session cookies |
+| **Google sign-in** | OAuth2 (optional) — enabled by env vars, accounts keyed on verified email |
 | **Role-based access** | `ROLE_ADMIN` enforced server-side for admin pages and APIs |
 | **Conversation history** | JPA entities, per-user scoping on every query |
 | **Memory** | User-authored facts injected into the system prompt, individually deletable |
@@ -144,6 +145,34 @@ java -jar app.jar \
   --spring.ai.openai.chat.options.model=llama3.2 \
   --spring.ai.openai.embedding.options.model=nomic-embed-text
 ```
+
+---
+
+## Sign-in options
+
+| Method | Notes |
+|---|---|
+| Username + password | Seeded `demo` / `admin`, plus self-registration |
+| **Continue with Google** | Appears automatically when OAuth credentials are configured |
+
+Enable Google sign-in with two environment variables:
+
+```
+GOOGLE_CLIENT_ID     = <client id>.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET = <client secret>
+```
+
+Authorised redirect URI in Google Cloud Console:
+
+```
+https://<your-host>/login/oauth2/code/google
+```
+
+Design notes worth knowing:
+
+- The registration is built **in code**, not mapped from properties, so a missing or malformed configuration hides the button instead of breaking startup.
+- The principal name is the **verified email**, which is also `User.username` — so signing in with Google on an existing password account keeps its conversations and memories.
+- `server.forward-headers-strategy=framework` is required behind Render's TLS-terminating proxy, otherwise the generated `redirect_uri` is `http://` and Google returns `redirect_uri_mismatch`.
 
 ---
 
