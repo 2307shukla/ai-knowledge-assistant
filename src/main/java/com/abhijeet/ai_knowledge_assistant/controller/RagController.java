@@ -1,47 +1,84 @@
 package com.abhijeet.ai_knowledge_assistant.controller;
 
 import com.abhijeet.ai_knowledge_assistant.service.RagService;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/rag")
 public class RagController {
 
-    @Autowired
-    private RagService ragService;
+    private static final int PREVIEW_LENGTH = 800;
 
-    @Autowired
-    private OpenAiChatModel chatModel;
+    private final RagService ragService;
+    private final OpenAiChatModel chatModel;
 
+    public RagController(RagService ragService, OpenAiChatModel chatModel) {
+        this.ragService = ragService;
+        this.chatModel = chatModel;
+    }
+
+    /** Upload a PDF, extract its text, and index it for later questions. */
     @PostMapping("/upload")
-    public ResponseEntity<String> uploadPdf(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
         try {
             ByteArrayResource resource = new ByteArrayResource(file.getBytes()) {
                 @Override
-                public String getFilename() { return file.getOriginalFilename(); }
+                public String getFilename() {
+                    return file.getOriginalFilename();
+                }
             };
-            ragService.loadPdf(resource);
-            return ResponseEntity.ok("PDF uploaded and indexed successfully!");
+
+            List<Document> documents = ragService.readPdf(resource);
+            ragService.index(documents);
+
+            String text = documents.stream()
+                    .map(Document::getText)
+                    .collect(Collectors.joining("\n\n"));
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("file", file.getOriginalFilename());
+            body.put("chunks", documents.size());
+            body.put("characters", text.length());
+            body.put("indexed", true);
+            body.put("preview", text.length() > PREVIEW_LENGTH
+                    ? text.substring(0, PREVIEW_LENGTH) + "..."
+                    : text);
+            return ResponseEntity.ok(body);
+
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Could not read the document: " + e.getMessage()));
         }
     }
 
     @GetMapping("/ask")
-    public ResponseEntity<String> ask(@RequestParam String question) {
+    public ResponseEntity<Map<String, Object>> ask(@RequestParam String question) {
         String context = ragService.search(question);
+
         if (context.isBlank()) {
-            return ResponseEntity.ok("No relevant documents found. Please upload a PDF first.");
+            return ResponseEntity.ok(Map.of(
+                    "message", "No relevant documents found. Add a PDF first."));
         }
-        String prompt = "Based on the following context, answer the question.\n\n" +
-                "Context:\n" + context + "\n\n" +
-                "Question: " + question;
+
+        String prompt = "Based on the following context, answer the question.\n\n"
+                + "Context:\n" + context + "\n\n"
+                + "Question: " + question;
+
         String answer = chatModel.call(prompt);
-        return ResponseEntity.ok(answer);
+        return ResponseEntity.ok(Map.of("answer", answer));
     }
 }

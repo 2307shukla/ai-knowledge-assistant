@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Assistant · Spring AI + Gemini</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0d12; --panel:#14181f; --line:#232a36; --muted:#8b95a7; --accent:#3b82f6; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: #e6e8ee;
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 40px 20px;
+  }
+  .wrap { width: min(720px, 100%); }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
+  .logo { font-weight: 700; letter-spacing: -0.3px; }
+  .nav a {
+    color: #c8cfdb; text-decoration: none; font-size: 14px; margin-left: 16px;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid transparent;
+  }
+  .nav a.primary { background: var(--accent); color: #fff; font-weight: 600; }
+  .nav a:hover { border-color: var(--line); }
+
+  h1 { font-size: 34px; letter-spacing: -1px; margin: 0 0 12px; line-height: 1.2; }
+  .lede { color: var(--muted); font-size: 16px; margin: 0 0 30px; max-width: 560px; }
+
+  .chatbox {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin-bottom: 18px;
+  }
+  .quota {
+    font-size: 12px; color: var(--muted); margin-bottom: 12px;
+    display: flex; justify-content: space-between;
+  }
+  #thread { max-height: 340px; overflow-y: auto; margin-bottom: 14px; }
+  #thread:empty { display: none; }
+  .msg { margin-bottom: 14px; display: flex; gap: 10px; }
+  .who {
+    width: 26px; height: 26px; flex: 0 0 26px; border-radius: 7px; display: grid;
+    place-items: center; font-size: 11px; font-weight: 700;
+  }
+  .msg.user .who { background: #1e2a3d; color: #93c5fd; }
+  .msg.ai .who { background: #10251a; color: #4ade80; }
+  .msg .body { flex: 1; white-space: pre-wrap; word-break: break-word; font-size: 14.5px; }
+
+  .row { display: flex; gap: 9px; }
+  input[type=text] {
+    flex: 1; background: #0b0d12; border: 1px solid #2a3140; color: #e6e8ee;
+    padding: 12px 14px; border-radius: 10px; font-size: 14.5px; outline: none;
+  }
+  input[type=text]:focus { border-color: var(--accent); }
+  button {
+    background: var(--accent); color: #fff; border: 0; padding: 0 20px;
+    border-radius: 10px; font-weight: 600; font-size: 14.5px; cursor: pointer;
+  }
+  button:disabled { opacity: 0.45; cursor: default; }
+
+  .upgrade {
+    display: none; margin-top: 14px; padding: 14px; border-radius: 10px;
+    background: #241d0f; border: 1px solid #453413; font-size: 14px; color: #fbbf24;
+  }
+  .upgrade a { color: #fbbf24; font-weight: 600; }
+
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 26px; }
+  .feat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .feat b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+  .feat span { font-size: 12.5px; color: var(--muted); }
+  .foot { margin-top: 26px; font-size: 12.5px; color: #5f6b7d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="logo">AI Assistant</div>
+    <div class="nav">
+      <a href="/login.html">Sign in</a>
+      <a href="/register.html" class="primary">Create account</a>
+    </div>
+  </div>
+
+  <h1>Talk to an AI that remembers you.</h1>
+  <p class="lede">
+    Real conversations with history, persistent memory and document Q&amp;A —
+    built with Spring Boot, Spring AI and Gemini. Try it below, no account needed.
+  </p>
+
+  <div class="chatbox">
+    <div class="quota">
+      <span id="quotaLabel">Free trial: checking…</span>
+      <span>No signup required</span>
+    </div>
+    <div id="thread"></div>
+    <div class="row">
+      <input id="guestInput" type="text" placeholder="Ask anything…" autocomplete="off">
+      <button id="guestSend">Send</button>
+    </div>
+    <div class="upgrade" id="upgrade">
+      You've used your free messages.
+      <a href="/register.html">Create an account</a> to keep chatting — it's free.
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feat"><b>Conversation memory</b><span>Facts you save follow you across chats</span></div>
+    <div class="feat"><b>Chat history</b><span>Every thread saved to your account</span></div>
+    <div class="feat"><b>Document Q&amp;A</b><span>Upload a PDF and ask about it</span></div>
+    <div class="feat"><b>Voice input</b><span>Speak instead of typing</span></div>
+  </div>
+
+  <div class="foot">Free tier · Gemini · runs on Render</div>
+</div>
+
+<script>
+  const input = document.getElementById('guestInput');
+  const send = document.getElementById('guestSend');
+  const thread = document.getElementById('thread');
+  const upgrade = document.getElementById('upgrade');
+  const quotaLabel = document.getElementById('quotaLabel');
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function setQuota(remaining) {
+    quotaLabel.textContent = remaining > 0
+      ? 'Free trial: ' + remaining + ' message' + (remaining === 1 ? '' : 's') + ' left'
+      : 'Free trial finished';
+    if (remaining <= 0) {
+      upgrade.style.display = 'block';
+      input.disabled = true;
+      send.disabled = true;
+    }
+  }
+
+  function add(role, text) {
+    const row = document.createElement('div');
+    row.className = 'msg ' + role;
+    row.innerHTML = '<div class="who">' + (role === 'user' ? 'You' : 'AI') + '</div>'
+                  + '<div class="body">' + esc(text) + '</div>';
+    thread.appendChild(row);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  async function loadQuota() {
+    try {
+      const r = await fetch('/api/guest/quota');
+      const d = await r.json();
+      setQuota(d.remaining);
+    } catch { quotaLabel.textContent = 'Free trial: 5 messages left'; }
+  }
+
+  async function ask() {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    send.disabled = true;
+    add('user', text);
+    try {
+      const r = await fetch('/api/guest/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text })
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        add('ai', d.error || ('HTTP ' + r.status));
+        if (d.signInRequired) setQuota(0);
+        return;
+      }
+      add('ai', d.reply);
+      setQuota(d.remaining);
+    } catch (e) {
+      add('ai', 'Request failed: ' + e.message);
+    } finally {
+      send.disabled = false;
+      input.focus();
+    }
+  }
+
+  send.addEventListener('click', ask);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+  loadQuota();
+</script>
+</body>
+</html>
