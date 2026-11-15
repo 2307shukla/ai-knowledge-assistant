@@ -8,9 +8,15 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Indexes the bundled sample document at startup so /api/rag/ask works
  * immediately, without the user having to upload anything first.
+ *
+ * Plain text is preferred over PDF: it keeps the repository free of any personal
+ * or copyrighted material, and it needs no PDF parsing.
  *
  * Failures are logged, never thrown: a broken embedding call must not stop
  * the whole application from booting.
@@ -19,7 +25,8 @@ import org.springframework.stereotype.Component;
 public class SampleDocumentIndexer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(SampleDocumentIndexer.class);
-    private static final String SAMPLE = "sample.pdf";
+    private static final String SAMPLE_TXT = "sample.txt";
+    private static final String SAMPLE_PDF = "sample.pdf";
 
     private final RagService ragService;
 
@@ -29,8 +36,6 @@ public class SampleDocumentIndexer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        ClassPathResource resource = new ClassPathResource(SAMPLE);
-
         // Already restored from disk - re-indexing would re-embed every chunk
         // and cost another round of API calls for nothing.
         if (!ragService.isEmpty()) {
@@ -38,19 +43,29 @@ public class SampleDocumentIndexer implements ApplicationRunner {
             return;
         }
 
-        if (!resource.exists()) {
-            log.warn("{} not found on the classpath - skipping startup indexing", SAMPLE);
+        ClassPathResource text = new ClassPathResource(SAMPLE_TXT);
+        if (text.exists()) {
+            try (InputStream in = text.getInputStream()) {
+                String content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                int chunks = ragService.indexText(content);
+                log.info("Indexed {} into the vector store ({} chunks)", SAMPLE_TXT, chunks);
+            } catch (Exception e) {
+                log.warn("Could not index {}: {}", SAMPLE_TXT, e.getMessage());
+            }
             return;
         }
 
-        long start = System.currentTimeMillis();
-        try {
-            ragService.loadPdf(resource);
-            log.info("Indexed {} into the vector store in {} ms", SAMPLE, System.currentTimeMillis() - start);
-        } catch (Exception e) {
-            // Common causes: bad API key, free-tier quota hit, network blip.
-            // The chat endpoint keeps working regardless.
-            log.warn("Could not index {}: {}", SAMPLE, e.getMessage());
+        ClassPathResource pdf = new ClassPathResource(SAMPLE_PDF);
+        if (pdf.exists()) {
+            try {
+                ragService.loadPdf(pdf);
+                log.info("Indexed {} into the vector store", SAMPLE_PDF);
+            } catch (Exception e) {
+                log.warn("Could not index {}: {}", SAMPLE_PDF, e.getMessage());
+            }
+            return;
         }
+
+        log.warn("No sample document found - document Q&A starts empty");
     }
 }

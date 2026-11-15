@@ -67,6 +67,20 @@ public class RagService {
         return documents.size() + " chunks indexed";
     }
 
+    /** Index plain text, splitting on blank lines into paragraph-sized chunks. */
+    public int indexText(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        List<Document> documents = java.util.Arrays.stream(text.split("\\n\\s*\\n"))
+                .map(String::trim)
+                .filter(paragraph -> paragraph.length() > 40)
+                .map(Document::new)
+                .collect(Collectors.toList());
+
+        return index(documents);
+    }
+
     /** True when there is nothing to search yet. */
     public boolean isEmpty() {
         return !loadedFromDisk && added.get() == 0;

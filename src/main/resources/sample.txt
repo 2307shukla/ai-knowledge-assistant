@@ -1,0 +1,23 @@
+Pega Platform — Overview
+
+Pega Platform is a low-code application development platform from Pegasystems. It is used to build enterprise applications that combine case management, workflow automation, decisioning and customer engagement. Applications are configured rather than coded from scratch, using a model-driven approach in which business rules, data models and user interfaces are defined as reusable assets.
+
+Case management is the core abstraction. A case represents a unit of work that moves through stages and steps, with processes, service-level agreements and business rules attached at each point. Cases can be created by users, by integrations or by scheduled processes.
+
+Development happens in two studios. App Studio is aimed at business users and low-code developers, offering a guided configuration experience. Dev Studio exposes the full rule-based environment for architects, including rule resolution, class hierarchy, inheritance and debugging tools.
+
+The application structure follows a layered model commonly called the situational layer cake. Organisation-wide assets sit at the bottom, division and group layers sit above them, and the application layer sits at the top. Rule resolution searches from the most specific layer upward, so a single application can override shared behaviour without copying it.
+
+User interface is built with Constellation, Pega's design system and React-based front end. Views are configured declaratively rather than coded, and the same view definitions render across web and mobile channels. The DX API exposes case types, views and data pages over REST so external applications can interact with the same case data.
+
+Decisioning is handled by the Customer Decision Hub, which evaluates propositions, arbitration and predictive models to choose the next best action for a customer. Models can be built in Prediction Studio and governed through the platform's decisioning lifecycle.
+
+Integrations use REST and SOAP connectors and services, data pages for reusable data access, and connectors for message brokers such as Apache Kafka. Data can be persisted in Pega's own schema or referenced from external systems of record.
+
+Deployment is typically to Pega Cloud, a managed Kubernetes-based environment. Self-managed deployments are also supported on customer infrastructure. Updates are delivered as minor releases on a regular cadence, and the platform follows an Infinity naming scheme for major versions.
+
+Security is enforced through role-based access control, attribute-based access control and access policies evaluated at the case and property level. Authentication can be delegated to an external identity provider using SAML or OpenID Connect, and audit trails record changes to rules and case data.
+
+Pega retired the Personal Edition, a self-contained local download aimed at individual learners, and now offers the Community Edition, a cloud-hosted trial environment. The platform's developer community is organised around Pega Academy courses and role-based certifications such as Certified System Architect and Certified Senior System Architect.
+
+This document is demo content for the AI Knowledge Assistant portfolio project. It contains no confidential material and is intended only to provide a realistic corpus for retrieval-augmented generation.
