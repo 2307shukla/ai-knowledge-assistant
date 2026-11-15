@@ -1,5 +1,0 @@
-com\abhijeet\ai_knowledge_assistant\AiKnowledgeAssistantApplication.class
-com\abhijeet\ai_knowledge_assistant\controller\RagController.class
-com\abhijeet\ai_knowledge_assistant\controller\ChatController.class
-com\abhijeet\ai_knowledge_assistant\controller\RagController$1.class
-com\abhijeet\ai_knowledge_assistant\service\RagService.class
