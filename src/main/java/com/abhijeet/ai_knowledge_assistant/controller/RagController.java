@@ -84,6 +84,19 @@ public class RagController {
                 + "Question: " + clean;
 
         String answer = chatModel.call(prompt);
-        return ResponseEntity.ok(Map.of("answer", answer));
+
+        double overlap = com.abhijeet.ai_knowledge_assistant.util.GroundingCheck
+                .overlap(answer, context);
+        boolean grounded = overlap >= 0.45;
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("answer", answer);
+        body.put("grounded", grounded);
+        body.put("overlap", Math.round(overlap * 100) / 100.0);
+        if (!grounded) {
+            body.put("warning", "The answer does not closely match the retrieved document text. "
+                    + "Treat it as unverified.");
+        }
+        return ResponseEntity.ok(body);
     }
 }

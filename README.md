@@ -85,6 +85,22 @@ Browser ──▶ Spring Security (session cookie)
 | `GET` | `/api/rag/ask?question=...` | Answer from indexed documents |
 | `POST` | `/api/insights` | **Structured JSON** answer: summary, key points, confidence |
 | `POST` | `/api/tools/ask` | **Function calling** — the model invokes Java tools (time, memories, conversation count) |
+| `GET` | `/api/conversations/{id}/export.csv` | Export the conversation as CSV |
+| `GET` | `/api/conversations/{id}/export.pdf` | Export the conversation as PDF |
+
+### Hallucination guard
+
+Document answers are checked against the retrieved context before being trusted:
+
+```json
+{ "answer": "...", "grounded": true, "overlap": 0.89 }
+```
+
+A token-overlap heuristic flags answers whose vocabulary doesn't appear in the
+retrieved text, returning `grounded:false` plus a warning. It catches the common
+failure — the model answering from its weights instead of the document — and
+does **not** catch a fluent answer that reuses the context's words while
+distorting meaning. It is a cheap signal, not a proof.
 
 ### Structured output
 
@@ -155,6 +171,19 @@ Embeddings are the expensive part — each chunk costs an API call. The vector s
 Verified: on a cold restart the log shows `Loaded vector store from …` followed by `Vector store already populated - skipping sample indexing`, and document questions still answer correctly.
 
 > **Caveat, stated honestly:** Render's free tier has an ephemeral filesystem. This survives a restart of a running instance but **not** a redeploy or a sleep/wake cycle. For true durability, set `VECTOR_STORE_PATH` to a mounted volume, or switch to `PgVectorStore` backed by a free Postgres instance.
+
+---
+
+## Performance
+
+Load-tested with 300 requests at concurrency 20 and 500 at concurrency 50:
+
+| Concurrency | Throughput | p50 | p95 | Errors |
+|---|---|---|---|---|
+| 20 | 144.7 req/s | 117.7 ms | 266.1 ms | **0** |
+| 50 | 127.4 req/s | 306.4 ms | 1,115.8 ms | **0** |
+
+Throughput plateaus around 130 req/s while p95 rises ~4×, which identifies the saturation point of a single instance. Method, environment and raw numbers: [`loadtest/RESULTS.md`](loadtest/RESULTS.md).
 
 ---
 
