@@ -8,11 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Persists messages in their own transaction.
- *
- * Streaming runs on a worker thread outside the request's transaction, so a
- * detached conversation entity cannot safely be saved there. Reloading inside
- * a short transaction keeps the JPA session boundary correct.
+ * Persists messages in their own transaction - streaming runs outside the request's transaction.
  */
 @Service
 public class ChatPersistence {

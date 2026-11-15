@@ -17,13 +17,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Token-bucket rate limiting on the endpoints that cost money or CPU.
- *
- * Keyed per signed-in user, falling back to client IP for guests. Without
- * this, a single script could burn the whole free Gemini quota in minutes.
- *
- * In-memory by design: it protects one instance. A multi-instance deployment
- * would move the buckets to Redis.
+ * Token-bucket rate limiting for the endpoints that call the AI provider.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {

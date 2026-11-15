@@ -11,13 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Uses PgVectorStore when the application is running against PostgreSQL, and
- * lets RagService fall back to the file-backed SimpleVectorStore otherwise
- * (for example on H2 during local development).
- *
- * The condition keys off the datasource URL rather than a separate flag, so
- * pointing SPRING_DATASOURCE_URL at Neon is enough to switch storage - there is
- * no second setting to forget.
+ * Uses PgVectorStore against PostgreSQL, otherwise RagService falls back to the file-backed store.
  */
 @Configuration
 public class VectorStoreConfig {

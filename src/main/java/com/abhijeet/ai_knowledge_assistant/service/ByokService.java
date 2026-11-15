@@ -13,21 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Bring-your-own-key support.
- *
- * A user can store their own provider key; requests are then made with that key
- * instead of the application's shared one, so their usage is billed to them and
- * never touches the server quota.
- *
- * Security decisions:
- *   - the key is encrypted at rest (AES-GCM) and never returned by the API;
- *   - only a masked hint is exposed;
- *   - the key is never logged, including on failure;
- *   - a user without a key transparently falls back to the shared key.
- *
- * Scope limitation, stated honestly: BYOK applies to chat only. Document
- * embeddings still use the server key, because the vector store is shared
- * across users and mixing providers there would produce incomparable vectors.
+ * Per-user provider keys, stored AES-GCM encrypted and never returned by the API.
  */
 @Service
 public class ByokService {

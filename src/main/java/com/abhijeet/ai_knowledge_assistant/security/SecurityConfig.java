@@ -57,9 +57,7 @@ public class SecurityConfig {
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login.html"),
                                 AnyRequestMatcher.INSTANCE))
-                // CSRF is disabled for this demo: the UI is a single page using
-                // JSON fetch calls. For production, use CookieCsrfTokenRepository
-                // and send the token in an X-XSRF-TOKEN header.
+                // JSON fetch calls from a single page; CSRF disabled for this demo.
                 .csrf(csrf -> csrf.disable());
 
         // Only wire the OAuth2 login flow when a Google client is configured.

@@ -13,12 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Lets a visitor try the assistant without creating an account, like a
- * limited guest session, then asks them to sign up.
- *
- * The counter lives in the HTTP session, so it resets when the browser session
- * ends. That is deliberate: this is a taste of the product, not a free tier.
- * A real quota needs a database keyed by user or IP.
+ * Anonymous trial: a few messages per browser session, then a sign-up prompt.
  */
 @RestController
 @RequestMapping("/api/guest")

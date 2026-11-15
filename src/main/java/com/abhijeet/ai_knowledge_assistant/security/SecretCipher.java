@@ -15,15 +15,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * AES-GCM encryption for secrets at rest (currently user-supplied API keys).
- *
- * The key comes from APP_ENCRYPTION_KEY (base64, 32 bytes). If that is absent a
- * random key is generated per process, so stored keys still work but are lost on
- * restart - the log warns about it rather than silently storing something that
- * will not decrypt later.
- *
- * GCM is used rather than CBC because it authenticates the ciphertext: a tampered
- * value fails to decrypt instead of producing garbage.
+ * AES-GCM encryption for secrets at rest. Key comes from APP_ENCRYPTION_KEY.
  */
 @Component
 public class SecretCipher {

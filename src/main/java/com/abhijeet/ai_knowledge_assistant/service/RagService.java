@@ -23,14 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
- * Document store with two backends:
- *
- *   - PgVectorStore when PostgreSQL is configured (durable across restarts)
- *   - SimpleVectorStore written to a JSON file otherwise (local development,
- *     or a deployment without a database)
- *
- * The backend is chosen by presence of a VectorStore bean from VectorStoreConfig,
- * so this class never needs to know which database is in play.
+ * Document store backed by PgVectorStore when PostgreSQL is configured, otherwise by a JSON file on disk.
  */
 @Service
 public class RagService {

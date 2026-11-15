@@ -22,11 +22,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Builds the model request from three layers:
- *
- *   1. System prompt  - behaviour plus the user's saved memories
- *   2. Conversation   - the last N messages, so the thread has continuity
- *   3. New message    - already persisted by the caller before this runs
+ * Builds the model request from the system prompt, recent history and the new message.
  */
 @Service
 public class ChatService {

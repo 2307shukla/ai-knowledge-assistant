@@ -11,20 +11,7 @@ import org.springframework.security.oauth2.client.registration.InMemoryClientReg
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 
 /**
- * Google OAuth2 registration, built in code rather than from properties.
- *
- * Why: the registration must only exist when credentials are actually present.
- * Declaring it in application.properties with empty defaults would create a
- * half-configured client, and the login button would fail at runtime instead of
- * simply not appearing.
- *
- * userNameAttributeName is "email" so the authenticated principal name equals
- * the email address, which is also the User.username - that keeps every
- * existing per-user query working without special cases.
- *
- * A malformed configuration degrades to "Google login unavailable" instead of
- * taking the whole application down: an optional sign-in method should never be
- * able to stop the site from starting.
+ * Google OAuth2 registration. Built in code so the client only exists when credentials are present.
  */
 @Configuration
 public class OAuthConfig {
