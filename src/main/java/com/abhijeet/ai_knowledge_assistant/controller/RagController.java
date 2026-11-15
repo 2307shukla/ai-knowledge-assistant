@@ -1,7 +1,7 @@
 package com.abhijeet.ai_knowledge_assistant.controller;
 
 import com.abhijeet.ai_knowledge_assistant.service.RagService;
-import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +16,7 @@ public class RagController {
     private RagService ragService;
 
     @Autowired
-    private OllamaChatModel chatModel;
+    private OpenAiChatModel chatModel;
 
     @PostMapping("/upload")
     public ResponseEntity<String> uploadPdf(@RequestParam("file") MultipartFile file) {
