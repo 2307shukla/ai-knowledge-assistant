@@ -127,6 +127,21 @@ spring.ai.openai.embedding.options.model=gemini-embedding-001
 
 ---
 
+## Persistence
+
+| Data | Storage | Survives restart? |
+|---|---|---|
+| Users, conversations, memories | H2 in-memory | ❌ recreated on boot |
+| Document embeddings | JSON file (`data/vector-store.json`) | ✅ reloaded from disk, **not** re-embedded |
+
+Embeddings are the expensive part — each chunk costs an API call. The vector store is written after every index operation and loaded on startup, so a restart reuses existing vectors instead of paying to recompute them.
+
+Verified: on a cold restart the log shows `Loaded vector store from …` followed by `Vector store already populated - skipping sample indexing`, and document questions still answer correctly.
+
+> **Caveat, stated honestly:** Render's free tier has an ephemeral filesystem. This survives a restart of a running instance but **not** a redeploy or a sleep/wake cycle. For true durability, set `VECTOR_STORE_PATH` to a mounted volume, or switch to `PgVectorStore` backed by a free Postgres instance.
+
+---
+
 ## Known limitations
 
 - **In-memory database.** Accounts, chats and memories reset when the container restarts. The demo account and sample document are recreated on boot. Persistent storage would need PostgreSQL.

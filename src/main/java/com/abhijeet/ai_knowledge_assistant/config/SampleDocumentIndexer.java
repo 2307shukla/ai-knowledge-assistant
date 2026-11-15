@@ -31,6 +31,13 @@ public class SampleDocumentIndexer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         ClassPathResource resource = new ClassPathResource(SAMPLE);
 
+        // Already restored from disk - re-indexing would re-embed every chunk
+        // and cost another round of API calls for nothing.
+        if (!ragService.isEmpty()) {
+            log.info("Vector store already populated - skipping sample indexing");
+            return;
+        }
+
         if (!resource.exists()) {
             log.warn("{} not found on the classpath - skipping startup indexing", SAMPLE);
             return;

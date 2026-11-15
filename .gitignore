@@ -2,6 +2,7 @@ target/
 .mvn/*
 !.mvn/wrapper/maven-wrapper.properties
 *.jar
+data/
 .idea/
 *.iml
 .vscode/
