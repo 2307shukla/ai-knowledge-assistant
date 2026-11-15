@@ -1,4 +1,4 @@
-package com.abhijeet.ai_knowledge_assistant.controller;
+﻿package com.abhijeet.ai_knowledge_assistant.controller;
 
 import com.abhijeet.ai_knowledge_assistant.service.RagService;
 import org.springframework.ai.document.Document;
@@ -35,6 +35,22 @@ public class RagController {
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) {
         try {
+            String filename = file.getOriginalFilename();
+            List<Document> documents;
+            String text;
+
+            if (filename != null && filename.toLowerCase().endsWith(".txt")) {
+                text = new String(file.getBytes());
+                int chunks = ragService.indexText(text);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("file", filename);
+                body.put("chunks", chunks);
+                body.put("characters", text.length());
+                body.put("indexed", true);
+                body.put("preview", text.length() > PREVIEW_LENGTH ? text.substring(0, PREVIEW_LENGTH) + "..." : text);
+                return ResponseEntity.ok(body);
+            }
+
             ByteArrayResource resource = new ByteArrayResource(file.getBytes()) {
                 @Override
                 public String getFilename() {
@@ -42,10 +58,10 @@ public class RagController {
                 }
             };
 
-            List<Document> documents = ragService.readPdf(resource);
+            documents = ragService.readPdf(resource);
             ragService.index(documents);
 
-            String text = documents.stream()
+            text = documents.stream()
                     .map(Document::getText)
                     .collect(Collectors.joining("\n\n"));
 
@@ -100,3 +116,4 @@ public class RagController {
         return ResponseEntity.ok(body);
     }
 }
+
