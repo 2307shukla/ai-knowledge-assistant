@@ -1,4 +1,4 @@
-﻿package com.abhijeet.ai_knowledge_assistant.controller;
+package com.abhijeet.ai_knowledge_assistant.controller;
 
 import com.abhijeet.ai_knowledge_assistant.service.RagService;
 import org.springframework.ai.document.Document;
