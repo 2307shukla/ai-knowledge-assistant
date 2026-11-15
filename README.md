@@ -6,6 +6,8 @@ Sign in, hold multiple conversations, teach it facts about yourself that persist
 
 **Live demo:** https://ai-knowledge-assistant-378a.onrender.com
 
+[![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml)
+
 > **Demo account:** `demo` / `demo123`
 
 ---
@@ -81,6 +83,20 @@ Browser ──▶ Spring Security (session cookie)
 | `DELETE` | `/api/memories/{id}` | Forget a memory |
 | `POST` | `/api/rag/upload` | Upload and index a PDF |
 | `GET` | `/api/rag/ask?question=...` | Answer from indexed documents |
+| `POST` | `/api/insights` | **Structured JSON** answer: summary, key points, confidence |
+| `POST` | `/api/tools/ask` | **Function calling** — the model invokes Java tools (time, memories, conversation count) |
+
+### Structured output
+
+`/api/insights` returns a typed object rather than prose:
+
+```json
+{ "summary": "...", "keyPoints": ["...", "..."], "confidence": "medium" }
+```
+
+Spring AI generates the JSON schema instruction and deserialises the reply. If a model returns unparseable or empty structure the endpoint fails with **502** instead of returning nulls — a silent empty object is worse than an error.
+
+> Note: structured output quality is model-dependent. Small local models (e.g. `llama3.2:3b`) often fail it; Gemini handles it reliably.
 
 Unauthenticated API calls return **401 JSON**; browser navigations redirect to the login page.
 
