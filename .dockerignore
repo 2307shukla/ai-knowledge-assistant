@@ -1,0 +1,8 @@
+# Keep the Docker build context small and make layer caching predictable
+target/
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.md
