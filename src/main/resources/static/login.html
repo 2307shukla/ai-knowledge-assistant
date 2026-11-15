@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in · AI Assistant</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #0b0d12; color: #e6e8ee; padding: 24px;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: min(400px, 100%); background: #14181f; border: 1px solid #232a36;
+    border-radius: 16px; padding: 32px;
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.4px; }
+  .sub { color: #8b95a7; font-size: 13px; margin-bottom: 24px; }
+  label { display: block; font-size: 12px; color: #8b95a7; text-transform: uppercase;
+          letter-spacing: 0.5px; margin-bottom: 7px; }
+  input {
+    width: 100%; background: #0b0d12; border: 1px solid #2a3140; color: #e6e8ee;
+    padding: 12px 13px; border-radius: 9px; font-size: 14px; outline: none; margin-bottom: 16px;
+  }
+  input:focus { border-color: #3b82f6; }
+  button {
+    width: 100%; background: #3b82f6; color: #fff; border: 0; padding: 12px;
+    border-radius: 9px; font-weight: 600; font-size: 15px; cursor: pointer;
+  }
+  .msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 16px; }
+  .err { background: #2a1414; border: 1px solid #4a1d1d; color: #f87171; }
+  .ok  { background: #10251a; border: 1px solid #1c4530; color: #4ade80; }
+  .demo {
+    margin-top: 22px; padding-top: 18px; border-top: 1px solid #232a36;
+    font-size: 12.5px; color: #8b95a7; line-height: 1.7;
+  }
+  code { background: #1c222c; padding: 2px 7px; border-radius: 5px; color: #93c5fd; }
+  .foot { margin-top: 18px; text-align: center; font-size: 13px; color: #8b95a7; }
+  a { color: #60a5fa; text-decoration: none; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>Welcome back</h1>
+    <div class="sub">Sign in to continue your conversations</div>
+
+    <div id="banner"></div>
+
+    <form method="post" action="/login">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" required autofocus>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+      <button type="submit">Sign in</button>
+    </form>
+
+    <div class="demo">
+      <strong style="color:#c8cfdb">Demo account</strong><br>
+      Username <code>demo</code> &nbsp; Password <code>demo123</code>
+    </div>
+
+    <div class="foot">No account? <a href="/register.html">Create one</a></div>
+  </main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const banner = document.getElementById('banner');
+  if (params.has('error')) {
+    banner.innerHTML = '<div class="msg err">Wrong username or password.</div>';
+  } else if (params.has('logout')) {
+    banner.innerHTML = '<div class="msg ok">You have been signed out.</div>';
+  }
+</script>
+</body>
+</html>

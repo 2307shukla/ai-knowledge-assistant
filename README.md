@@ -1,46 +1,62 @@
 # AI Knowledge Assistant
 
-A retrieval-augmented Q&A service built with **Spring Boot 3** and **Spring AI**, running entirely on free-tier infrastructure with **Google Gemini**.
+A Claude-style AI chat application built with **Spring Boot 3**, **Spring AI** and **Spring Security**, running on **Google Gemini's free tier**.
 
-Ask questions directly, or upload a PDF and ask questions grounded in its contents.
+Sign in, hold multiple conversations, teach it facts about yourself that persist across chats, and ask questions about uploaded documents.
 
 **Live demo:** https://ai-knowledge-assistant-378a.onrender.com
+
+> **Demo account:** `demo` / `demo123`
 
 ---
 
 ## Features
 
-- **Direct chat** — questions answered by `gemini-3.6-flash`
-- **Document Q&A (RAG)** — PDFs are chunked, embedded, and searched by similarity before the model answers
-- **Zero-setup demo** — a sample document is indexed automatically at startup, so `/api/rag/ask` works the moment the app boots
-- **Readable errors** — every failure returns structured JSON with the real upstream cause, never a blank 500 page
-- **Provider-agnostic** — any OpenAI-compatible endpoint works; switching providers is a config change, not a code change
+| Feature | Detail |
+|---|---|
+| **Authentication** | Spring Security form login, BCrypt password hashing, self-registration |
+| **Conversations** | Multiple chat threads per user, auto-titled from the first message |
+| **History** | Full message history per conversation, restored on reload |
+| **Memory** | User-authored facts injected into every conversation's system prompt |
+| **Document Q&A** | Upload a PDF; questions are answered from its contents (RAG) |
+| **Per-user isolation** | Every query is scoped to the signed-in user — no cross-account access |
+
+---
+
+## How memory works
+
+Claude-style memory, but **explicit rather than inferred**.
+
+- The user adds facts in the sidebar: *"Prefers short bullet answers"*, *"Works with Pega and Java"*.
+- Those facts are stored per user and prepended to the system prompt on every request.
+- The user can delete any memory, and it stops being used immediately.
+
+Why not have the model summarise history automatically? Because that costs an extra API call per exchange, can drift over time, and silently captures things the user never agreed to. Explicit memory is cheaper, predictable and honest.
+
+Within a conversation, the last 12 messages are also sent so the thread has continuity.
 
 ---
 
 ## Architecture
 
 ```
-                    ┌──────────────────────────────────────────┐
-  Browser ─────────▶│  Spring Boot 3 (REST)                    │
-                    │                                          │
-                    │  /api/chat/ask ──────────────┐           │
-                    │                              ▼           │
-                    │                     Gemini chat model    │
-                    │                              ▲           │
-                    │  /api/rag/upload ──▶ SimpleVectorStore   │
-                    │                          │               │
-                    │  /api/rag/ask ───────────┘               │
-                    │        (embed → similarity search)       │
-                    └──────────────────────────────────────────┘
-                                     │
-                                     ▼
-                    Google Gemini API (free tier)
-                    chat: gemini-3.6-flash
-                    embeddings: gemini-embedding-001
+Browser ──▶ Spring Security (session cookie)
+              │
+              ├─ /api/auth/**        register, current user
+              ├─ /api/conversations  list, create, delete
+              ├─ /api/conversations/{id}/messages  history, send
+              ├─ /api/memories       list, add, delete
+              └─ /api/rag/**         PDF upload + document Q&A
+                        │
+                        ▼
+                 ChatService
+                   ├─ system prompt + memories
+                   ├─ last 12 messages
+                   └─ new message
+                        │
+                        ▼
+              Gemini (OpenAI-compatible surface)
 ```
-
-Spring AI talks to Gemini through its **OpenAI-compatible surface**, so the standard OpenAI client is used with a different base URL and paths.
 
 ---
 
@@ -48,29 +64,20 @@ Spring AI talks to Gemini through its **OpenAI-compatible surface**, so the stan
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/chat/ask?question=...` | Answer a question directly |
-| `POST` | `/api/rag/upload` | Upload and index a PDF (multipart form field `file`) |
-| `GET` | `/api/rag/ask?question=...` | Answer using the indexed documents |
+| `POST` | `/api/auth/register` | Create an account |
+| `GET` | `/api/auth/me` | Current user |
+| `GET` | `/api/conversations` | List conversations |
+| `POST` | `/api/conversations` | Create a conversation |
+| `DELETE` | `/api/conversations/{id}` | Delete a conversation |
+| `GET` | `/api/conversations/{id}/messages` | Message history |
+| `POST` | `/api/conversations/{id}/messages` | Send a message, get a reply |
+| `GET` | `/api/memories` | List saved memories |
+| `POST` | `/api/memories` | Add a memory |
+| `DELETE` | `/api/memories/{id}` | Forget a memory |
+| `POST` | `/api/rag/upload` | Upload and index a PDF |
+| `GET` | `/api/rag/ask?question=...` | Answer from indexed documents |
 
-### Examples
-
-```bash
-# Direct chat
-curl "https://ai-knowledge-assistant-378a.onrender.com/api/chat/ask?question=What+is+Pega+Platform"
-
-# Upload a document
-curl -X POST "https://ai-knowledge-assistant-378a.onrender.com/api/rag/upload" \
-     -F "file=@/path/to/document.pdf"
-
-# Ask about the indexed document
-curl "https://ai-knowledge-assistant-378a.onrender.com/api/rag/ask?question=Summarise+the+key+points"
-```
-
-Errors come back as JSON rather than an HTML error page:
-
-```json
-{ "error": "NonTransientAiException", "detail": "HTTP 404 - model not found ..." }
-```
+Unauthenticated API calls return **401 JSON**; browser navigations redirect to the login page.
 
 ---
 
@@ -80,29 +87,27 @@ Errors come back as JSON rather than an HTML error page:
 |---|---|
 | Language | Java 21 |
 | Framework | Spring Boot 3.3.5 |
+| Security | Spring Security 6 (form login, BCrypt) |
 | AI | Spring AI 1.0.0 |
-| Model | Google Gemini (chat + embeddings) |
-| Vector store | `SimpleVectorStore` (in-memory) |
-| Build | Maven (multi-stage Docker build with cached dependencies) |
-| Hosting | Render (Docker) |
+| Model | Google Gemini `gemini-3.6-flash` / `gemini-embedding-001` |
+| Storage | H2 in-memory + JPA |
+| Build | Maven, multi-stage Docker |
+| Hosting | Render (free tier) |
+
+No paid dependency. No credit card anywhere.
 
 ---
 
 ## Running locally
 
 ```bash
-# 1. Get a free Gemini API key: https://aistudio.google.com/apikey
-export AI_API_KEY=your-key-here        # Windows: set AI_API_KEY=your-key-here
-
-# 2. Run
+export AI_API_KEY=your-gemini-key     # Windows: set AI_API_KEY=your-key
 ./mvnw spring-boot:run
 ```
 
-Open http://localhost:8080
+Open http://localhost:8080 and sign in with `demo` / `demo123`.
 
 ### Configuration
-
-Everything except the key is committed in `src/main/resources/application.properties`:
 
 ```properties
 spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai
@@ -113,37 +118,19 @@ spring.ai.openai.chat.options.model=gemini-3.6-flash
 spring.ai.openai.embedding.options.model=gemini-embedding-001
 ```
 
-> Model names are hardcoded deliberately. A **blank** environment variable overrides a default in Spring and silently falls back to the OpenAI default model, which produces a confusing `model not found` error.
-
----
-
-## Deployment
-
-The `Dockerfile` builds in two stages:
-
-1. `maven:3.9-eclipse-temurin-21` — resolves dependencies in a cached layer (`pom.xml` only), then compiles source
-2. `eclipse-temurin:21-jre-alpine` — ships just the fat jar
-
-Changing source code only invalidates the final layer, so rebuilds stay fast.
-
-On Render: connect the repo, set `AI_API_KEY`, and deploys run automatically on push.
+> Gemini is reached through its OpenAI-compatible surface, so the standard Spring AI OpenAI client is used unchanged — note there is no `/v1` in its paths.
 
 ---
 
 ## Known limitations
 
-- **The vector store is in-memory.** Uploaded documents are lost when the container restarts or sleeps. The bundled sample document is re-indexed on every boot, so the demo always works. Persistent storage would need a database with `pgvector`.
-- **Free-tier cold starts.** The service sleeps after ~15 minutes of inactivity; the first request afterwards can take up to a minute.
-- **No authentication.** The API is public, so it is not suitable for private or sensitive documents, and usage counts against the free quota.
+- **In-memory database.** Accounts, chats and memories reset when the container restarts. The demo account and sample document are recreated on boot. Persistent storage would need PostgreSQL.
+- **CSRF disabled.** The UI is a single page using JSON fetch calls. For production, use `CookieCsrfTokenRepository` and send `X-XSRF-TOKEN`.
+- **Free-tier cold start.** Render sleeps after ~15 minutes idle; the first request afterwards can take up to a minute.
+- **Public demo account.** `demo` is shared, so do not store anything private in it.
 
 ---
 
-## Replacing the sample document
-
-Drop any **text-based** PDF (not a scanned image) at `src/main/resources/sample.pdf` and redeploy. It is indexed at startup automatically.
-
----
-
-## License
+## Licence
 
 MIT

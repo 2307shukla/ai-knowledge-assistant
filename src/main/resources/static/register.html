@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create account · AI Assistant</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #0b0d12; color: #e6e8ee; padding: 24px;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: min(400px, 100%); background: #14181f; border: 1px solid #232a36;
+    border-radius: 16px; padding: 32px;
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.4px; }
+  .sub { color: #8b95a7; font-size: 13px; margin-bottom: 24px; }
+  label { display: block; font-size: 12px; color: #8b95a7; text-transform: uppercase;
+          letter-spacing: 0.5px; margin-bottom: 7px; }
+  input {
+    width: 100%; background: #0b0d12; border: 1px solid #2a3140; color: #e6e8ee;
+    padding: 12px 13px; border-radius: 9px; font-size: 14px; outline: none; margin-bottom: 16px;
+  }
+  input:focus { border-color: #3b82f6; }
+  button {
+    width: 100%; background: #3b82f6; color: #fff; border: 0; padding: 12px;
+    border-radius: 9px; font-weight: 600; font-size: 15px; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 16px; }
+  .err { background: #2a1414; border: 1px solid #4a1d1d; color: #f87171; }
+  .ok  { background: #10251a; border: 1px solid #1c4530; color: #4ade80; }
+  .foot { margin-top: 18px; text-align: center; font-size: 13px; color: #8b95a7; }
+  a { color: #60a5fa; text-decoration: none; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>Create account</h1>
+    <div class="sub">Your chats and memories stay on your own account</div>
+
+    <div id="banner"></div>
+
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username" placeholder="at least 3 characters">
+
+    <label for="displayName">Display name <span style="color:#5f6b7d">(optional)</span></label>
+    <input id="displayName" autocomplete="name" placeholder="Abhijeet">
+
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+
+    <button id="go">Create account</button>
+
+    <div class="foot">Already registered? <a href="/login.html">Sign in</a></div>
+  </main>
+
+<script>
+  const banner = document.getElementById('banner');
+  const go = document.getElementById('go');
+
+  function show(text, cls) {
+    banner.innerHTML = '<div class="msg ' + cls + '">' + text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) + '</div>';
+  }
+
+  go.onclick = async () => {
+    go.disabled = true;
+    banner.innerHTML = '';
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value.trim(),
+          displayName: document.getElementById('displayName').value.trim(),
+          password: document.getElementById('password').value
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        show(data.error || ('HTTP ' + res.status), 'err');
+        return;
+      }
+      show('Account created. Taking you to sign in…', 'ok');
+      setTimeout(() => location.href = '/login.html', 900);
+    } catch (e) {
+      show('Request failed: ' + e.message, 'err');
+    } finally {
+      go.disabled = false;
+    }
+  };
+</script>
+</body>
+</html>
