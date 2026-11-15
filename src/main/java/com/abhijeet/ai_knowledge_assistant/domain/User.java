@@ -30,6 +30,13 @@ public class User {
     @Column(nullable = false, length = 20)
     private String role = "USER";
 
+    /**
+     * User-supplied AI provider key (BYOK), AES-GCM encrypted. Never returned to
+     * the client and never logged - only a masked hint is exposed.
+     */
+    @Column(length = 1024)
+    private String apiKeyEncrypted;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -76,6 +83,18 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public String getApiKeyEncrypted() {
+        return apiKeyEncrypted;
+    }
+
+    public void setApiKeyEncrypted(String apiKeyEncrypted) {
+        this.apiKeyEncrypted = apiKeyEncrypted;
+    }
+
+    public boolean hasOwnKey() {
+        return apiKeyEncrypted != null && !apiKeyEncrypted.isBlank();
     }
 
     public Instant getCreatedAt() {

@@ -84,6 +84,7 @@ flowchart LR
 | **Function calling** | `@Tool` methods bound to the signed-in user per request |
 | **Guest trial** | 5 messages without an account, then a sign-up prompt |
 | **Rate limiting** | Bucket4j token bucket, 20 req/min per user or IP |
+| **BYOK** | Users can bring their own API key — AES-GCM encrypted, write-only, masked |
 | **Input sanitisation** | Control characters stripped, hard length caps |
 | **Global error handling** | `@RestControllerAdvice` returning readable JSON |
 | **Markdown + code highlighting** | `marked` + DOMPurify + highlight.js |
@@ -163,6 +164,7 @@ Interactive docs: **https://ai-knowledge-assistant-378a.onrender.com/swagger-ui.
 | `GET` | `/api/conversations/{id}/export.csv` | Export conversation as CSV |
 | `GET` | `/api/conversations/{id}/export.pdf` | Export conversation as PDF |
 | `GET` / `POST` / `DELETE` | `/api/memories` | Manage memory |
+| `GET` / `POST` / `DELETE` | `/api/keys` | BYOK: manage your own provider key |
 | `POST` | `/api/rag/upload` | Upload and index a PDF |
 | `GET` | `/api/rag/ask` | Answer from documents, with grounding score |
 | `POST` | `/api/insights` | Structured JSON answer |
@@ -188,6 +190,36 @@ A token-overlap heuristic flags answers whose vocabulary does not appear in the 
 Sign in as `admin` and open `/admin.html`.
 
 Shows aggregate counts only — users, conversations, messages, memories, average messages per conversation, and a per-user table. **No message content is exposed**, and access is enforced by Spring Security, not by hiding a link.
+
+---
+
+## Bring your own key (BYOK)
+
+Users can store their own provider key. Their requests are then made with that key, so usage is billed to them and never touches the shared quota.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/keys` | `{configured, hint, encryptionPersistent}` — never the key |
+| `POST /api/keys` | Store a key (write-only) |
+| `DELETE /api/keys` | Remove it |
+
+Security decisions, and why:
+
+- **Encrypted at rest** with AES-GCM. GCM authenticates the ciphertext, so a tampered value fails to decrypt instead of producing garbage.
+- **Write-only API.** There is no endpoint that returns the key — not even to its owner.
+- **Masked hint only.** The UI shows `****1234`.
+- **Never logged**, including in error paths.
+- **Per-request model.** A user with a key gets their own `OpenAiChatModel`; everyone else transparently falls back to the shared key.
+
+Set the encryption key in production:
+
+```bash
+openssl rand -base64 32        # copy into APP_ENCRYPTION_KEY on Render
+```
+
+If `APP_ENCRYPTION_KEY` is unset, a per-process key is generated and stored keys are lost on restart — the application logs a warning rather than failing silently.
+
+**Scope limitation:** BYOK covers chat only. Document embeddings still use the server key, because the vector store is shared across users and mixing providers there would produce incomparable vectors.
 
 ---
 

@@ -37,20 +37,29 @@ public class ChatService {
     private final ChatMessageRepository messages;
     private final MemoryRepository memories;
     private final ConversationRepository conversations;
+    private final ByokService byok;
 
     public ChatService(ChatModel chatModel,
                        ChatMessageRepository messages,
                        MemoryRepository memories,
-                       ConversationRepository conversations) {
+                       ConversationRepository conversations,
+                       ByokService byok) {
         this.chatModel = chatModel;
         this.messages = messages;
         this.memories = memories;
         this.conversations = conversations;
+        this.byok = byok;
+    }
+
+    /** The user's own key when they have one, otherwise the shared key. */
+    private ChatModel modelFor(User user) {
+        ChatModel own = byok.modelFor(user);
+        return own != null ? own : chatModel;
     }
 
     /** Non-streaming reply (kept for simple clients and guests). */
     public String reply(User user, Conversation conversation) {
-        ChatResponse response = chatModel.call(new Prompt(buildPrompt(user, conversation)));
+        ChatResponse response = modelFor(user).call(new Prompt(buildPrompt(user, conversation)));
         String text = response.getResult().getOutput().getText();
         return text == null || text.isBlank() ? "(no response)" : text;
     }
@@ -66,7 +75,7 @@ public class ChatService {
 
         StringBuilder full = new StringBuilder();
 
-        for (ChatResponse response : chatModel.stream(new Prompt(buildPrompt(user, conversation))).toIterable()) {
+        for (ChatResponse response : modelFor(user).stream(new Prompt(buildPrompt(user, conversation))).toIterable()) {
             String chunk = response.getResult().getOutput().getText();
             if (chunk != null && !chunk.isEmpty()) {
                 full.append(chunk);

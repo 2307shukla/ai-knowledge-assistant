@@ -138,6 +138,22 @@
   .bubble.md pre:hover .copy { opacity: 1; }
   .copy:hover { border-color: #475569; }
   .meta { font-size: 11px; color: #5f6b7d; margin-top: 8px; }
+
+  /* ---------- BYOK ---------- */
+  .byok { padding: 0 12px 10px; }
+  #byokStatus { font-size: 12px; color: #93c5fd; margin-bottom: 7px; }
+  #byokStatus.empty { color: #5f6b7d; }
+  .byok input {
+    width: 100%; background: #0b0d12; border: 1px solid #2a3140; color: #e6e8ee;
+    border-radius: 7px; padding: 7px 9px; font-size: 12px; outline: none;
+    font-family: ui-monospace, monospace;
+  }
+  .byok-actions { display: flex; gap: 6px; margin-top: 7px; }
+  .byok-actions button {
+    flex: 1; background: #1e293b; border: 1px solid #334155; color: #c8cfdb;
+    border-radius: 7px; padding: 6px 0; font-size: 12px; cursor: pointer;
+  }
+  .byok-actions button:hover { border-color: #475569; }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
 
@@ -155,6 +171,16 @@
   <div class="memadd">
     <input id="memoryInput" placeholder="Add a fact about you…">
     <button id="addMemory" title="Save">+</button>
+  </div>
+
+  <div class="section">Your API key</div>
+  <div class="byok">
+    <div id="byokStatus" class="empty">Checking…</div>
+    <input id="byokInput" type="password" placeholder="Paste your Gemini key" autocomplete="off">
+    <div class="byok-actions">
+      <button id="byokSave" type="button">Save</button>
+      <button id="byokClear" type="button">Remove</button>
+    </div>
   </div>
 
   <div class="foot">
@@ -548,11 +574,56 @@
     }
   });
 
+  // ---------------- BYOK ----------------
+  async function loadKey() {
+    const el = document.getElementById('byokStatus');
+    try {
+      const d = await api('/api/keys');
+      if (d.configured) {
+        el.textContent = 'Using your key (' + (d.hint || '****') + ')';
+        el.classList.remove('empty');
+      } else {
+        el.textContent = 'Using the shared demo key';
+        el.classList.add('empty');
+      }
+    } catch (e) {
+      el.textContent = 'Could not read key status';
+      el.classList.add('empty');
+    }
+  }
+
+  document.getElementById('byokSave').addEventListener('click', async () => {
+    const input = document.getElementById('byokInput');
+    const key = input.value.trim();
+    if (!key) return;
+    try {
+      await api('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key })
+      });
+      input.value = '';
+      await loadKey();
+    } catch (e) {
+      alert('Could not save the key: ' + e.message);
+    }
+  });
+
+  document.getElementById('byokClear').addEventListener('click', async () => {
+    try {
+      await api('/api/keys', { method: 'DELETE' });
+      await loadKey();
+    } catch (e) {
+      alert('Could not remove the key: ' + e.message);
+    }
+  });
+
   (async function init() {
     try {
       const me = await api('/api/auth/me');
       document.getElementById('who').textContent = me.displayName || me.username;
       await loadMemories();
+      await loadKey();
       const list = await refreshConversations();
       if (list.length) {
         await selectConversation(list[0].id);
