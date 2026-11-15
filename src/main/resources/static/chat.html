@@ -156,11 +156,48 @@
     border-radius: 7px; padding: 6px 0; font-size: 12px; cursor: pointer;
   }
   .byok-actions button:hover { border-color: #475569; }
+
+  /* ---------- mobile ---------- */
+  .mobilebar { display: none; }
+  #scrim { display: none; }
+
+  @media (max-width: 760px) {
+    body { display: block; }
+
+    aside {
+      position: fixed; top: 0; bottom: 0; left: 0; z-index: 30;
+      width: 84vw; max-width: 320px;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+    }
+    aside.open { transform: translateX(0); }
+
+    #scrim.open {
+      display: block; position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.55); z-index: 25;
+    }
+
+    main { height: 100vh; }
+    .mobilebar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .mobilebar button {
+      background: none; border: 1px solid var(--line); color: #c8cfdb;
+      border-radius: 8px; padding: 5px 9px; cursor: pointer;
+    }
+    .mobilebar span { font-weight: 600; font-size: 14px; }
+    #messages { padding: 16px 14px; }
+    form.composer { padding: 10px 12px 16px; }
+    .tool { width: 40px; flex: 0 0 40px; }
+  }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
 
 </head>
 <body>
+<div id="scrim"></div>
 <aside>
   <div class="brand">AI Assistant<span>Spring AI · Gemini</span></div>
   <button class="newchat" id="newChat">+ New chat</button>
@@ -192,6 +229,12 @@
 </aside>
 
 <main>
+  <div class="mobilebar">
+    <button id="menuBtn" aria-label="Open menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <span>AI Assistant</span>
+  </div>
   <div id="messages"><div class="welcome">Loading…</div></div>
   <form class="composer" id="composer">
     <input type="file" id="fileInput" accept=".pdf,.txt" hidden>
@@ -266,6 +309,7 @@
 
   async function selectConversation(id) {
     currentId = id;
+    closeMenu();
     await refreshConversations();
     const msgs = await api('/api/conversations/' + id + '/messages');
     const box = document.getElementById('messages');
@@ -281,6 +325,7 @@
   async function newChat() {
     const created = await api('/api/conversations', { method: 'POST' });
     currentId = created.id;
+    closeMenu();
     await refreshConversations();
     document.getElementById('messages').innerHTML =
       '<div class="welcome">New chat. Ask anything.</div>';
@@ -639,6 +684,22 @@
       alert('Could not remove the key: ' + e.message);
     }
   });
+
+  // ---------------- mobile menu ----------------
+  const asideEl = document.querySelector('aside');
+  const scrim = document.getElementById('scrim');
+  const menuBtn = document.getElementById('menuBtn');
+
+  function closeMenu() {
+    asideEl.classList.remove('open');
+    scrim.classList.remove('open');
+  }
+
+  menuBtn.addEventListener('click', () => {
+    asideEl.classList.add('open');
+    scrim.classList.add('open');
+  });
+  scrim.addEventListener('click', closeMenu);
 
   (async function init() {
     try {
