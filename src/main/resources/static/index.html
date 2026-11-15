@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Knowledge Assistant</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #0b0d12; color: #e6e8ee;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  .card {
+    width: min(680px, 100%); background: #14181f; border: 1px solid #232a36;
+    border-radius: 14px; padding: 28px;
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.3px; }
+  .sub { color: #8b95a7; font-size: 13px; margin-bottom: 22px; }
+  .status {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #10251a; color: #4ade80; border: 1px solid #1c4530;
+    padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    margin-bottom: 22px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+  label { display: block; font-size: 12px; color: #8b95a7; margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .row { display: flex; gap: 9px; }
+  input {
+    flex: 1; background: #0b0d12; border: 1px solid #2a3140; color: #e6e8ee;
+    padding: 11px 13px; border-radius: 9px; font-size: 14px; outline: none;
+  }
+  input:focus { border-color: #3b82f6; }
+  button {
+    background: #3b82f6; color: #fff; border: 0; padding: 11px 20px;
+    border-radius: 9px; font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .out {
+    margin-top: 18px; background: #0b0d12; border: 1px solid #232a36;
+    border-radius: 9px; padding: 15px; min-height: 74px; font-size: 14px;
+    white-space: pre-wrap; word-break: break-word; color: #c8cfdb;
+  }
+  .out.err { color: #f87171; border-color: #4a1d1d; }
+  code { background: #1c222c; padding: 2px 6px; border-radius: 5px; font-size: 12.5px; color: #93c5fd; }
+  .eps { margin-top: 22px; padding-top: 18px; border-top: 1px solid #232a36; font-size: 13px; color: #8b95a7; }
+  .eps div { margin: 5px 0; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>AI Knowledge Assistant</h1>
+    <div class="sub">Spring Boot + Spring AI + Google Gemini</div>
+    <div class="status"><span class="dot"></span> Service online</div>
+
+    <label for="q">Ask something</label>
+    <div class="row">
+      <input id="q" placeholder="What is Pega Platform?" autocomplete="off">
+      <button id="go">Ask</button>
+    </div>
+    <div class="out" id="out">Responses appear here.</div>
+
+    <div class="eps">
+      <div><code>GET /api/chat/ask?question=...</code> — direct AI answer</div>
+      <div><code>POST /api/rag/upload</code> — index a PDF</div>
+      <div><code>GET /api/rag/ask?question=...</code> — answer from your PDFs</div>
+      <div style="margin-top:12px;color:#5f6b7d">Free tier sleeps after ~15 min idle. First request may take up to a minute to wake.</div>
+    </div>
+  </main>
+
+<script>
+  const q = document.getElementById('q');
+  const out = document.getElementById('out');
+  const go = document.getElementById('go');
+
+  async function ask() {
+    const question = q.value.trim();
+    if (!question) { return; }
+    go.disabled = true;
+    out.className = 'out';
+    out.textContent = 'Thinking…';
+    try {
+      const res = await fetch('/api/chat/ask?question=' + encodeURIComponent(question));
+      const text = await res.text();
+      if (!res.ok) {
+        out.className = 'out err';
+        out.textContent = 'HTTP ' + res.status + '\n' + text;
+      } else {
+        out.textContent = text;
+      }
+    } catch (e) {
+      out.className = 'out err';
+      out.textContent = 'Request failed: ' + e.message;
+    } finally {
+      go.disabled = false;
+    }
+  }
+
+  go.addEventListener('click', ask);
+  q.addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+</script>
+</body>
+</html>
