@@ -38,7 +38,7 @@ public class OAuthConfig {
 
         if (clientId.isBlank() || clientSecret.isBlank()) {
             log.info("Google OAuth is not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET absent)");
-            return new InMemoryClientRegistrationRepository();
+            return registrationId -> null;
         }
 
         try {
@@ -62,7 +62,7 @@ public class OAuthConfig {
         } catch (Exception e) {
             log.error("Google OAuth configuration is invalid, disabling Google login: {}",
                     e.getMessage());
-            return new InMemoryClientRegistrationRepository();
+            return registrationId -> null;
         }
     }
 }
