@@ -25,6 +25,9 @@ public class VectorStoreConfig {
         return PgVectorStore.builder(jdbcTemplate, embeddingModel)
                 .initializeSchema(true)
                 .vectorTableName("vector_store")
+                .indexType(org.springframework.ai.vectorstore.pgvector.PgVectorStore.PgIndexType.IVFFlat)
+                .dimensions(768)
                 .build();
     }
 }
+
