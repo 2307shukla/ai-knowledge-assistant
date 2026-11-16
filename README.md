@@ -267,14 +267,26 @@ Throughput plateaus around 130 req/s while p95 rises ~4× — the saturation poi
 
 ## Persistence
 
-| Data | Storage | Survives restart? |
+| Data | Default (H2) | With `DATABASE_URL` → Postgres |
 |---|---|---|
-| Users, conversations, memories | H2 in-memory | ❌ recreated on boot |
-| Document embeddings | JSON file (`data/vector-store.json`) | ✅ reloaded, not re-embedded |
+| Users, conversations, memories | H2 in-memory — ❌ recreated on boot | ✅ persistent |
+| Document embeddings | JSON file (`data/vector-store.json`) — ✅ reloaded, not re-embedded | ✅ `PgVectorStore` (`vector_store` table) |
 
-Embeddings are the expensive part — each chunk costs an API call. The store is written after every index operation and reloaded on startup.
+Embeddings are the expensive part — each chunk costs an API call. In file mode the store is written after every index operation and reloaded on startup.
 
-> **Caveat:** Render's free tier has an ephemeral filesystem. This survives a restart of a running instance but **not** a redeploy or sleep/wake. For durability, point `VECTOR_STORE_PATH` at a mounted volume, or switch to `PgVectorStore` backed by a free Postgres instance.
+> **Caveat:** Render's free tier has an ephemeral filesystem. The JSON file survives a restart of a running instance but **not** a redeploy or sleep/wake.
+
+### Switching to Postgres (free)
+
+Any free-tier Postgres with the `pgvector` extension works, for example Neon, Supabase, or Render's free Postgres (which expires after 30 days). Set:
+
+```
+DATABASE_URL=jdbc:postgresql://<host>:5432/<db>?sslmode=require
+DATABASE_USERNAME=<user>
+DATABASE_PASSWORD=<password>
+```
+
+A `postgresql` URL is detected at startup and embeddings switch to `PgVectorStore` automatically. The app runs `CREATE EXTENSION IF NOT EXISTS vector` and creates the table on first boot; if your database user can't create extensions, enable `vector` once from the provider's dashboard.
 
 ---
 
@@ -311,8 +323,8 @@ To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a 
 
 ## Known limitations
 
-- **H2 is in-memory.** Accounts and chats reset when the container restarts. Postgres with `pgvector` would fix both this and vector durability.
-- **CSRF is disabled** for the JSON single-page UI. Production would use `CookieCsrfTokenRepository` with an `X-XSRF-TOKEN` header.
+- **H2 is in-memory by default.** Accounts and chats reset when the container restarts unless `DATABASE_URL` points at Postgres (see [Persistence](#persistence)).
+- **CSRF tokens are disabled** for the JSON single-page UI. The session cookie is `SameSite=Lax`, so browsers don't send it on cross-site POST/PUT/DELETE requests, which blocks classic CSRF. Production would add `CookieCsrfTokenRepository` with an `X-XSRF-TOKEN` header as well.
 - **Rate limiting is per-instance.** Buckets live in memory; multiple instances would need Redis.
 - **Prompt injection is not solved.** The system prompt is server-controlled and the model has no tools that act on untrusted input, but no filter reliably prevents injection.
 - **Structured output is model-dependent.** Small models fail the schema; the endpoint returns 502 rather than nulls when that happens.
