@@ -1,0 +1,2 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.abhijeet.ai_knowledge_assistant.config.DatabaseUrlEnvironmentPostProcessor

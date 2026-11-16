@@ -278,15 +278,15 @@ Embeddings are the expensive part — each chunk costs an API call. In file mode
 
 ### Switching to Postgres (free)
 
-Any free-tier Postgres with the `pgvector` extension works, for example Neon, Supabase, or Render's free Postgres (which expires after 30 days). Set:
+Any free-tier Postgres with the `pgvector` extension works, for example Neon, Supabase, or Render's free Postgres (which expires after 30 days). Copy the provider's connection string as-is into one variable:
 
 ```
-DATABASE_URL=jdbc:postgresql://<host>:5432/<db>?sslmode=require
-DATABASE_USERNAME=<user>
-DATABASE_PASSWORD=<password>
+DATABASE_URL=postgresql://<user>:<password>@<host>/<db>?sslmode=require
 ```
 
-A `postgresql` URL is detected at startup and embeddings switch to `PgVectorStore` automatically. The app runs `CREATE EXTENSION IF NOT EXISTS vector` and creates the table on first boot; if your database user can't create extensions, enable `vector` once from the provider's dashboard.
+At startup `DatabaseUrlEnvironmentPostProcessor` converts it into JDBC settings, and it takes precedence over any `SPRING_DATASOURCE_*` variables. A `jdbc:postgresql://…` URL is accepted too.
+
+A Postgres database is detected at startup and embeddings switch to `PgVectorStore` automatically. The app runs `CREATE EXTENSION IF NOT EXISTS vector` and creates the table on first boot; if your database user can't create extensions, enable `vector` once from the provider's dashboard.
 
 ---
 
