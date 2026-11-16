@@ -7,16 +7,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * A lightweight grounding check for retrieval-augmented answers.
- *
- * It is a heuristic, not a truth oracle: it measures how much of the answer's
- * vocabulary actually appears in the retrieved context. An answer built from
- * the context scores high; a confident invention about unrelated topics scores
- * low.
- *
- * This catches the common failure mode - the model ignoring the context and
- * answering from its own weights - and is honest about what it cannot catch:
- * a fluent answer that reuses the context's words while distorting the meaning.
+ * Measures how much of an answer's vocabulary appears in the retrieved context.
+ * A heuristic for flagging ungrounded answers, not proof of correctness.
  */
 public final class GroundingCheck {
 

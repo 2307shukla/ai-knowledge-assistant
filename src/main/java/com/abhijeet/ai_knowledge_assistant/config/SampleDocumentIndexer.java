@@ -12,14 +12,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Indexes the bundled sample document at startup so /api/rag/ask works
- * immediately, without the user having to upload anything first.
- *
- * Plain text is preferred over PDF: it keeps the repository free of any personal
- * or copyrighted material, and it needs no PDF parsing.
- *
- * Failures are logged, never thrown: a broken embedding call must not stop
- * the whole application from booting.
+ * Indexes the bundled sample document at startup so document Q&A works without an upload.
  */
 @Component
 public class SampleDocumentIndexer implements ApplicationRunner {

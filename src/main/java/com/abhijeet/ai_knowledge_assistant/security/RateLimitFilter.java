@@ -39,7 +39,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         if (buckets.size() > MAX_TRACKED_CLIENTS) {
-            buckets.clear();
+            evictIdleBuckets();
         }
 
         Bucket bucket = buckets.computeIfAbsent(clientKey(request), key -> newBucket());
@@ -69,11 +69,19 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return "user:" + auth.getName();
         }
 
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return "ip:" + forwarded.split(",")[0].trim();
-        }
+        // Tomcat's RemoteIpValve (server.forward-headers-strategy=native) resolves the
+        // client address from X-Forwarded-For right to left, skipping only trusted
+        // proxies, so a client cannot spoof it by sending its own header.
         return "ip:" + request.getRemoteAddr();
+    }
+
+    /**
+     * Drops buckets that have fully refilled: those clients have been idle for at
+     * least a refill period, so forgetting them loses no rate-limit state. Active
+     * clients keep their buckets, so the cap can't be used to reset everyone's limit.
+     */
+    private void evictIdleBuckets() {
+        buckets.values().removeIf(bucket -> bucket.getAvailableTokens() >= CAPACITY);
     }
 
     private Bucket newBucket() {
