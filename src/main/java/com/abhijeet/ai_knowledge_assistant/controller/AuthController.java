@@ -51,6 +51,10 @@ public class AuthController {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Password must be at least 6 characters."));
         }
+        if (username.equalsIgnoreCase(com.abhijeet.ai_knowledge_assistant.domain.KnowledgeDocument.PUBLIC)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "That username is already taken."));
+        }
         if (users.existsByUsername(username)) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "That username is already taken."));

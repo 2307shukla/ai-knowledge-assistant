@@ -4,6 +4,8 @@ import com.abhijeet.ai_knowledge_assistant.domain.ChatMessage;
 import com.abhijeet.ai_knowledge_assistant.domain.Conversation;
 import com.abhijeet.ai_knowledge_assistant.domain.Memory;
 import com.abhijeet.ai_knowledge_assistant.domain.User;
+import com.abhijeet.ai_knowledge_assistant.rag.RagPrompt;
+import com.abhijeet.ai_knowledge_assistant.rag.SourceHit;
 import com.abhijeet.ai_knowledge_assistant.repository.ChatMessageRepository;
 import com.abhijeet.ai_knowledge_assistant.repository.ConversationRepository;
 import com.abhijeet.ai_knowledge_assistant.repository.MemoryRepository;
@@ -34,17 +36,40 @@ public class ChatService {
     private final MemoryRepository memories;
     private final ConversationRepository conversations;
     private final ByokService byok;
+    private final RagService rag;
 
     public ChatService(ChatModel chatModel,
                        ChatMessageRepository messages,
                        MemoryRepository memories,
                        ConversationRepository conversations,
-                       ByokService byok) {
+                       ByokService byok,
+                       RagService rag) {
         this.chatModel = chatModel;
         this.messages = messages;
         this.memories = memories;
         this.conversations = conversations;
         this.byok = byok;
+        this.rag = rag;
+    }
+
+    /** A reply and the passages it was grounded on (empty when documents were not used). */
+    public record Reply(String text, List<SourceHit> sources) {
+
+        /** The text saved to history: the answer plus a Sources footnote when documents were used. */
+        public String persisted() {
+            return text + RagPrompt.footnote(text, sources);
+        }
+    }
+
+    /**
+     * Passages from this user's own documents (and the public sample) for the question, or none
+     * when documents are not requested. The owner filter is applied by RagService.
+     */
+    public List<SourceHit> sourcesFor(User user, String question, boolean useDocuments) {
+        if (!useDocuments || question == null || question.isBlank()) {
+            return List.of();
+        }
+        return rag.search(question, user.getUsername(), RagService.TOP_K);
     }
 
     /** The user's own key when they have one, otherwise the shared key. */
@@ -53,11 +78,15 @@ public class ChatService {
         return own != null ? own : chatModel;
     }
 
-    /** Non-streaming reply (kept for simple clients and guests). */
+    /** Non-streaming reply (kept for simple clients). */
     public String reply(User user, Conversation conversation) {
-        ChatResponse response = modelFor(user).call(new Prompt(buildPrompt(user, conversation)));
+        return reply(user, conversation, List.of()).text();
+    }
+
+    public Reply reply(User user, Conversation conversation, List<SourceHit> sources) {
+        ChatResponse response = modelFor(user).call(new Prompt(buildPrompt(user, conversation, sources)));
         String text = response.getResult().getOutput().getText();
-        return text == null || text.isBlank() ? "(no response)" : text;
+        return new Reply(text == null || text.isBlank() ? "(no response)" : text, sources);
     }
 
     /**
@@ -66,12 +95,19 @@ public class ChatService {
      * caller can persist it.
      */
     public String streamReply(User user, Long conversationId, Consumer<String> onChunk) {
+        return streamReply(user, conversationId, List.of(), onChunk).text();
+    }
+
+    public Reply streamReply(User user, Long conversationId, List<SourceHit> sources, Consumer<String> onChunk) {
         Conversation conversation = conversations.findById(conversationId)
                 .orElseThrow(() -> new IllegalStateException("Conversation not found"));
 
         StringBuilder full = new StringBuilder();
 
-        for (ChatResponse response : modelFor(user).stream(new Prompt(buildPrompt(user, conversation))).toIterable()) {
+        for (ChatResponse response : modelFor(user).stream(new Prompt(buildPrompt(user, conversation, sources))).toIterable()) {
+            if (response == null || response.getResult() == null) {
+                continue;
+            }
             String chunk = response.getResult().getOutput().getText();
             if (chunk != null && !chunk.isEmpty()) {
                 full.append(chunk);
@@ -79,12 +115,16 @@ public class ChatService {
             }
         }
 
-        return full.toString();
+        return new Reply(full.toString(), sources);
     }
 
-    private List<Message> buildPrompt(User user, Conversation conversation) {
+    private List<Message> buildPrompt(User user, Conversation conversation, List<SourceHit> sources) {
         List<Message> prompt = new ArrayList<>();
-        prompt.add(new SystemMessage(systemPrompt(user)));
+        String system = systemPrompt(user);
+        if (!sources.isEmpty()) {
+            system += RagPrompt.instructions(sources);
+        }
+        prompt.add(new SystemMessage(system));
 
         List<ChatMessage> history = new ArrayList<>(
                 messages.findTop12ByConversationOrderByIdDesc(conversation));

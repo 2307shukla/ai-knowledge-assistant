@@ -1,51 +1,62 @@
 package com.abhijeet.ai_knowledge_assistant.service;
 
+import com.abhijeet.ai_knowledge_assistant.domain.DocumentChunk;
+import com.abhijeet.ai_knowledge_assistant.domain.KnowledgeDocument;
+import com.abhijeet.ai_knowledge_assistant.rag.SourceHit;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.reader.pdf.PagePdfDocumentReader;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * Document store backed by PgVectorStore when PostgreSQL is configured, otherwise by a JSON file on disk.
+ * Vector store access. PgVectorStore when PostgreSQL is configured, otherwise a JSON file on disk.
+ *
+ * <p><b>Privacy:</b> every chunk is stored with an {@code owner} metadata field, and every search
+ * goes through {@link #search(String, String, int)}, which filters to the caller's own documents
+ * plus the public sample. There is no unfiltered search method.
  */
 @Service
 public class RagService {
 
     private static final Logger log = LoggerFactory.getLogger(RagService.class);
-    private static final String VECTOR_TABLE = "vector_store";
+
+    public static final String OWNER = "owner";
+    public static final String DOCUMENT_ID = "documentId";
+    public static final String FILE = "file";
+    public static final String PAGE = "page";
+    public static final String POSITION = "position";
+
+    /** Passages retrieved per question. */
+    public static final int TOP_K = 4;
 
     private final VectorStore vectorStore;
     private final SimpleVectorStore fileStore;
     private final Path storePath;
-    private final JdbcTemplate jdbcTemplate;
-    private final AtomicInteger added = new AtomicInteger();
-    private volatile boolean loadedFromDisk;
 
     public RagService(EmbeddingModel embeddingModel,
                       ObjectProvider<VectorStore> providedStore,
-                      JdbcTemplate jdbcTemplate,
                       @Value("${app.vector-store.path:./data/vector-store.json}") String path) {
-
-        this.jdbcTemplate = jdbcTemplate;
         VectorStore custom = providedStore.getIfAvailable();
-
         if (custom != null) {
             this.vectorStore = custom;
             this.fileStore = null;
@@ -56,79 +67,157 @@ public class RagService {
             this.fileStore = simple;
             this.vectorStore = simple;
             this.storePath = Paths.get(path);
-            log.info("Vector store backend: SimpleVectorStore at {}", storePath.toAbsolutePath());
+            log.info("Vector store backend: SimpleVectorStore (local JSON file)");
             loadFromDisk();
         }
     }
 
-    public List<Document> readPdf(Resource resource) {
-        return new PagePdfDocumentReader(resource).get();
+    /** Embeds the document's chunks and records each chunk's vector id. */
+    public void index(KnowledgeDocument document) {
+        List<Document> vectors = new ArrayList<>();
+        for (DocumentChunk chunk : document.getChunks()) {
+            String id = UUID.randomUUID().toString();
+            chunk.setVectorId(id);
+            vectors.add(new Document(id, chunk.getText(), metadata(document, chunk)));
+        }
+        if (!vectors.isEmpty()) {
+            vectorStore.add(vectors);
+            persist();
+        }
     }
 
-    public int index(List<Document> documents) {
-        vectorStore.add(documents);
-        added.addAndGet(documents.size());
+    /** Removes the document's vectors (its database rows are removed by the caller). */
+    public void remove(KnowledgeDocument document) {
+        List<String> ids = document.getChunks().stream()
+                .map(DocumentChunk::getVectorId)
+                .filter(Objects::nonNull)
+                .toList();
+        removeVectors(ids);
+    }
+
+    public void removeVectors(List<String> ids) {
+        if (!ids.isEmpty()) {
+            vectorStore.delete(ids);
+            persist();
+        }
+    }
+
+    /**
+     * The passages closest to the question, from the caller's own documents and the public
+     * sample only. Numbered from 1 for citation.
+     */
+    public List<SourceHit> search(String question, String owner, int topK) {
+        if (owner == null || owner.isBlank()) {
+            throw new IllegalArgumentException("A search always needs an owner");
+        }
+        SearchRequest request = SearchRequest.builder()
+                .query(question)
+                .topK(topK)
+                .filterExpression(ownerFilter(owner))
+                .build();
+        List<Document> results = vectorStore.similaritySearch(request);
+        List<SourceHit> hits = new ArrayList<>();
+        for (Document d : results) {
+            Map<String, Object> m = d.getMetadata();
+            // Defence in depth: never return a passage the filter should have excluded.
+            Object docOwner = m.get(OWNER);
+            if (!owner.equals(docOwner) && !KnowledgeDocument.PUBLIC.equals(docOwner)) {
+                continue;
+            }
+            hits.add(new SourceHit(hits.size() + 1, String.valueOf(m.get(DOCUMENT_ID)),
+                    String.valueOf(m.get(FILE)), integer(m.get(PAGE)), d.getText(), d.getScore()));
+        }
+        return hits;
+    }
+
+    static Filter.Expression ownerFilter(String owner) {
+        FilterExpressionBuilder b = new FilterExpressionBuilder();
+        return b.in(OWNER, owner, KnowledgeDocument.PUBLIC).build();
+    }
+
+    static Map<String, Object> metadata(KnowledgeDocument document, DocumentChunk chunk) {
+        Map<String, Object> m = new HashMap<>();
+        m.put(OWNER, document.getOwner());
+        m.put(DOCUMENT_ID, document.getId());
+        m.put(FILE, document.getFilename());
+        m.put(POSITION, chunk.getPosition());
+        if (chunk.getPage() != null) {
+            m.put(PAGE, chunk.getPage());
+        }
+        return m;
+    }
+
+    /**
+     * File-store mode only: the vectors that survived a restart, grouped by document, so the
+     * database registry (lost when the in-memory database restarts) can be rebuilt without re-embedding anything.
+     */
+    public List<StoredDocument> storedDocuments() {
+        if (storePath == null || !Files.exists(storePath)) {
+            return List.of();
+        }
+        Map<String, StoredDocument> byId = new HashMap<>();
+        try {
+            JsonNode root = new ObjectMapper().readTree(storePath.toFile());
+            root.fields().forEachRemaining(entry -> {
+                JsonNode node = entry.getValue();
+                JsonNode meta = node.path("metadata");
+                String documentId = meta.path(DOCUMENT_ID).asText(null);
+                String owner = meta.path(OWNER).asText(null);
+                if (documentId == null || owner == null) {
+                    return; // legacy vector without an owner: never searchable, never restored
+                }
+                String text = node.hasNonNull("text") ? node.get("text").asText() : node.path("content").asText("");
+                StoredDocument doc = byId.computeIfAbsent(documentId, id ->
+                        new StoredDocument(id, owner, meta.path(FILE).asText("document"), new ArrayList<>()));
+                doc.chunks().add(new StoredChunk(entry.getKey(), meta.path(POSITION).asInt(doc.chunks().size()),
+                        meta.has(PAGE) ? meta.get(PAGE).asInt() : null, text));
+            });
+        } catch (Exception e) {
+            log.warn("Could not read the vector-store file to restore the document list: {}", e.getClass().getSimpleName());
+        }
+        return new ArrayList<>(byId.values());
+    }
+
+    public record StoredDocument(String id, String owner, String file, List<StoredChunk> chunks) {
+    }
+
+    public record StoredChunk(String vectorId, int position, Integer page, String text) {
+    }
+
+    /** The underlying store. For maintenance and tests only: it has no owner filter. */
+    public VectorStore vectorStore() {
+        return vectorStore;
+    }
+
+    public boolean usesFileStore() {
+        return fileStore != null;
+    }
+
+    private static Integer integer(Object value) {
+        if (value instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return value == null ? null : Integer.valueOf(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private void persist() {
         if (fileStore != null) {
             saveToDisk();
         }
-        return documents.size();
-    }
-
-    public String loadPdf(Resource resource) {
-        List<Document> documents = readPdf(resource);
-        index(documents);
-        return documents.size() + " chunks indexed";
-    }
-
-    /** Index plain text, splitting on blank lines into paragraph-sized chunks. */
-    public int indexText(String text) {
-        if (text == null || text.isBlank()) {
-            return 0;
-        }
-        List<Document> documents = Arrays.stream(text.split("\\n\\s*\\n"))
-                .map(String::trim)
-                .filter(paragraph -> paragraph.length() > 40)
-                .map(Document::new)
-                .collect(Collectors.toList());
-
-        return index(documents);
-    }
-
-    /** True when there is nothing to search yet. */
-    public boolean isEmpty() {
-        if (fileStore != null) {
-            return !loadedFromDisk && added.get() == 0;
-        }
-        try {
-            Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM " + VECTOR_TABLE, Integer.class);
-            return count == null || count == 0;
-        } catch (Exception e) {
-            // table not created yet on a fresh database
-            return true;
-        }
-    }
-
-    public String search(String query) {
-        SearchRequest request = SearchRequest.builder()
-                .query(query)
-                .topK(3)
-                .build();
-        List<Document> results = vectorStore.similaritySearch(request);
-        return results.stream()
-                .map(Document::getText)
-                .collect(Collectors.joining("\n\n"));
     }
 
     private void loadFromDisk() {
         try {
             if (Files.exists(storePath) && Files.size(storePath) > 4) {
                 fileStore.load(storePath.toFile());
-                loadedFromDisk = true;
-                log.info("Loaded vector store from {}", storePath.toAbsolutePath());
+                log.info("Loaded the vector-store file");
             }
         } catch (Exception e) {
-            log.warn("Could not load vector store from {}: {}", storePath, e.getMessage());
+            log.warn("Could not load the vector-store file: {}", e.getClass().getSimpleName());
         }
     }
 
@@ -139,9 +228,8 @@ public class RagService {
                 Files.createDirectories(parent);
             }
             fileStore.save(storePath.toFile());
-            log.info("Saved vector store to {}", storePath.toAbsolutePath());
         } catch (Exception e) {
-            log.warn("Could not save vector store to {}: {}", storePath, e.getMessage());
+            log.warn("Could not save the vector-store file: {}", e.getClass().getSimpleName());
         }
     }
 }

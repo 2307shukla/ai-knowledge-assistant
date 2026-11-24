@@ -1,5 +1,8 @@
 package com.abhijeet.ai_knowledge_assistant.controller;
 
+import com.abhijeet.ai_knowledge_assistant.exception.ErrorMessages;
+import com.abhijeet.ai_knowledge_assistant.rag.SourceHit;
+
 import com.abhijeet.ai_knowledge_assistant.domain.ChatMessage;
 import com.abhijeet.ai_knowledge_assistant.domain.Conversation;
 import com.abhijeet.ai_knowledge_assistant.domain.User;
@@ -34,6 +37,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/conversations")
 public class ConversationController {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ConversationController.class);
 
     private static final int MAX_MESSAGE_LENGTH = 4000;
     private static final long STREAM_TIMEOUT_MS = 180_000L;
@@ -101,7 +106,7 @@ public class ConversationController {
             return ResponseEntity.notFound().build();
         }
 
-        messages.deleteAll(messages.findByConversationOrderByIdAsc(conversation));
+        messages.deleteByConversationId(conversation.getId());
         conversations.delete(conversation);
         return ResponseEntity.ok(Map.of("deleted", true));
     }
@@ -130,7 +135,15 @@ public class ConversationController {
         return ResponseEntity.ok(history);
     }
 
-    public record MessageRequest(String content) {
+    /**
+     * @param content      the message
+     * @param useDocuments answer from the user's own documents (with citations) when true
+     */
+    public record MessageRequest(String content, Boolean useDocuments) {
+
+        boolean documents() {
+            return Boolean.TRUE.equals(useDocuments);
+        }
     }
 
     /** Non-streaming send. Kept for simple clients; the UI uses the stream endpoint. */
@@ -148,7 +161,9 @@ public class ConversationController {
         String text = validate(request);
 
         messages.save(new ChatMessage(conversation, "user", text));
-        String answer = chatService.reply(user, conversation);
+        ChatService.Reply reply = chatService.reply(user, conversation,
+                chatService.sourcesFor(user, text, request.documents()));
+        String answer = reply.persisted();
         messages.save(new ChatMessage(conversation, "assistant", answer));
 
         if ("New chat".equals(conversation.getTitle())) {
@@ -159,6 +174,7 @@ public class ConversationController {
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("reply", answer);
+        body.put("sources", RagController.sources(reply.sources()));
         body.put("title", conversation.getTitle());
         return ResponseEntity.ok(body);
     }
@@ -183,21 +199,29 @@ public class ConversationController {
 
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
 
+        final boolean useDocuments = request.documents();
         taskExecutor.execute(() -> {
             try {
-                String full = chatService.streamReply(user, conversationId, chunk -> {
+                List<SourceHit> sources = chatService.sourcesFor(user, text, useDocuments);
+                if (useDocuments) {
+                    // Sent before the answer so the client can show where it comes from.
+                    emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(
+                            Map.of("sources", RagController.sources(sources)))));
+                }
+                ChatService.Reply reply = chatService.streamReply(user, conversationId, sources, chunk -> {
                     try {
                         emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(chunk)));
                     } catch (IOException e) {
                         throw new UncheckedIOException(e);
                     }
                 });
-                persistence.append(conversationId, "assistant", full, null);
+                persistence.append(conversationId, "assistant", reply.persisted(), null);
                 emitter.complete();
             } catch (Exception e) {
+                log.error("Streaming reply failed for conversation {}", conversationId, e);
                 try {
-                    emitter.send(SseEmitter.event().data(
-                            objectMapper.writeValueAsString(Map.of("error", String.valueOf(e.getMessage())))));
+                    emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(
+                            Map.of("error", ErrorMessages.forUser(e)))));
                 } catch (Exception ignored) {
                     // client disconnected - nothing useful left to do
                 }
