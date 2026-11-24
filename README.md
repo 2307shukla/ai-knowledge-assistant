@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)
 ![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-6DB33F)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.10-6DB33F)
 ![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0-6DB33F)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -153,8 +153,6 @@ Everything except the key is committed:
 ```properties
 spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai
 spring.ai.openai.api-key=${AI_API_KEY:unset}
-spring.ai.openai.chat.completions-path=/chat/completions
-spring.ai.openai.embedding.embeddings-path=/embeddings
 spring.ai.openai.chat.options.model=gemini-3.6-flash
 spring.ai.openai.embedding.options.model=gemini-embedding-001
 app.vector-store.path=${VECTOR_STORE_PATH:./data/vector-store.json}
