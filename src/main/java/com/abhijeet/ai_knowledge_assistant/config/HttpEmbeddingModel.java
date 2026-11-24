@@ -34,11 +34,17 @@ public class HttpEmbeddingModel implements EmbeddingModel {
     private final String endpoint;
     private final String apiKey;
     private final String model;
+    private final int dimensions;
 
-    public HttpEmbeddingModel(String baseUrl, String apiKey, String model) {
+    /**
+     * @param dimensions the vector size to request and expect; it must match the vector table's size
+     *                   (Gemini returns 3072 values unless asked for fewer)
+     */
+    public HttpEmbeddingModel(String baseUrl, String apiKey, String model, int dimensions) {
         this.endpoint = baseUrl.replaceAll("/+$", "") + "/embeddings";
         this.apiKey = apiKey;
         this.model = model;
+        this.dimensions = dimensions;
     }
 
     @Override
@@ -66,7 +72,7 @@ public class HttpEmbeddingModel implements EmbeddingModel {
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(
-                            mapper.writeValueAsString(Map.of("model", model, "input", batch))))
+                            mapper.writeValueAsString(Map.of("model", model, "input", batch, "dimensions", dimensions))))
                     .build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
@@ -84,6 +90,10 @@ public class HttpEmbeddingModel implements EmbeddingModel {
                 JsonNode values = item.path("embedding");
                 if (index < 0 || index >= ordered.length || !values.isArray() || values.isEmpty()) {
                     throw new IllegalStateException("Embedding response was malformed");
+                }
+                if (values.size() != dimensions) {
+                    throw new IllegalStateException("Embedding has " + values.size() + " values but "
+                            + dimensions + " were expected; check spring.ai.vectorstore.pgvector.dimensions");
                 }
                 float[] vector = new float[values.size()];
                 for (int j = 0; j < vector.length; j++) {

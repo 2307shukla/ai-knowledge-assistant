@@ -23,7 +23,8 @@ public class HttpEmbeddingConfig {
                     return new HttpEmbeddingModel(
                             env.getProperty("spring.ai.openai.base-url", "https://generativelanguage.googleapis.com/v1beta/openai"),
                             env.getProperty("spring.ai.openai.api-key", "unset"),
-                            env.getProperty("spring.ai.openai.embedding.options.model", "gemini-embedding-001"));
+                            env.getProperty("spring.ai.openai.embedding.options.model", "gemini-embedding-001"),
+                            env.getProperty("spring.ai.vectorstore.pgvector.dimensions", Integer.class, 768));
                 }
                 return bean;
             }
