@@ -34,7 +34,7 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     /** The password that used to be published for the admin account; it must never work again. */
     private static final String RETIRED_ADMIN_PASSWORD = "admin123";
-    private static final int MIN_ADMIN_PASSWORD_LENGTH = 12;
+    private static final int MIN_ADMIN_CREDENTIAL_LENGTH = 12;
 
     public DemoDataSeeder(UserRepository users, MemoryRepository memories, PasswordEncoder encoder,
                           @Value("${app.admin-password:}") String adminPassword) {
@@ -73,9 +73,9 @@ public class DemoDataSeeder implements ApplicationRunner {
                 });
                 return;
             }
-            if (adminPassword.length() < MIN_ADMIN_PASSWORD_LENGTH) {
+            if (adminPassword.length() < MIN_ADMIN_CREDENTIAL_LENGTH) {
                 log.warn("The configured admin credential is shorter than {} characters; no admin account was created",
-                        MIN_ADMIN_PASSWORD_LENGTH);
+                        MIN_ADMIN_CREDENTIAL_LENGTH);
                 return;
             }
             if (existing.isEmpty()) {
