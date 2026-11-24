@@ -332,6 +332,12 @@ To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a 
 
 ---
 
+## Related project
+
+**[AI Log Analyzer](https://github.com/2307shukla/ai-log-analyzer)**: Spring Boot + Spring AI security and reliability log analyzer. It detects nine log formats, runs deterministic detection rules with MITRE ATT&CK mapping, scores suspicious IPs with offline GeoIP, fires YAML alert rules, charts errors and spikes, exports PDF reports, and uses an LLM only for the incident report and chat. Live: https://ai-log-analyzer-5l3n.onrender.com
+
+---
+
 ## Licence
 
 MIT
