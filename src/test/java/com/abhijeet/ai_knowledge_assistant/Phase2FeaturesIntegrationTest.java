@@ -101,7 +101,7 @@ class Phase2FeaturesIntegrationTest {
         mvc.perform(get("/api/rag/ask").param("question", "vault combination").param("documents", secret)
                 .with(user(intruder).roles("USER"))).andExpect(status().isNotFound());
         // A mixed list fails as a whole: one foreign id must not be silently dropped.
-        String mine = upload(intruder, "My own notes about gardening.");
+        String mine = upload(intruder, "My own notes about gardening: tomatoes need sun, water and regular feeding in summer.");
         mvc.perform(get("/api/rag/ask").param("question", "vault").param("documents", mine + "," + secret)
                 .with(user(intruder).roles("USER"))).andExpect(status().isNotFound());
         assertThat(chat.prompts.size()).isEqualTo(calls);

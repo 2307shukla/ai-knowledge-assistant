@@ -124,7 +124,10 @@ class DocumentPrivacyIntegrationTest {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
 
         assertThat(body).doesNotContain(aliceDoc).doesNotContain("Zebracorn quarterly");
-        assertThat(chat.prompts).isNotEmpty().noneMatch(p -> p.contains("confidential to Alice"));
+        // Bob owns nothing relevant, so the documents hold no match: the model is not called at all
+        // (it used to be called without documents). Either way, Alice's text never reaches it.
+        assertThat(chat.prompts).noneMatch(p -> p.contains("confidential to Alice"));
+        assertThat(body).contains("couldn't find this in your documents");
     }
 
     @Test
