@@ -169,6 +169,35 @@ public class RagController {
         return ResponseEntity.ok(body);
     }
 
+    @Operation(summary = "The text of one page of one of your documents (for the source panel). Another user's id answers 404.")
+    @GetMapping("/documents/{id}/passages")
+    public ResponseEntity<Map<String, Object>> passages(@PathVariable String id,
+                                                        @RequestParam(required = false) Integer page,
+                                                        Authentication auth) {
+        Optional<KnowledgeDocument> found = documents.get(auth.getName(), id);
+        if (found.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        for (DocumentChunk chunk : found.get().getChunks()) {
+            if (page != null && !page.equals(chunk.getPage())) {
+                continue;
+            }
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("position", chunk.getPosition());
+            m.put("page", chunk.getPage());
+            m.put("text", chunk.getText());
+            rows.add(m);
+            if (rows.size() >= 20) {
+                break;
+            }
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("file", found.get().getFilename());
+        body.put("passages", rows);
+        return ResponseEntity.ok(body);
+    }
+
     @Operation(summary = "A short summary of one of your documents plus three questions to start with")
     @GetMapping("/documents/{id}/summary")
     public ResponseEntity<Map<String, Object>> summary(@PathVariable String id, Authentication auth) {

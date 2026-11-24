@@ -412,6 +412,7 @@ DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if
 - **"Not found in your documents":** passages scoring below `APP_RAG_MIN_SCORE` (default `0.25`) are dropped. When nothing is left, the answer says so and **the model is not called**, so it cannot guess. Raise the value to be stricter, lower it if good questions get refused.
 - **Summary and starter questions:** after an upload, `GET /api/rag/documents/{id}/summary` returns a three-sentence summary and three questions (one model call, then cached until the document is deleted or the service restarts).
 - **Export:** `GET /api/conversations/{id}/export.md` downloads a chat as Markdown (CSV and PDF already existed). Only the chat's owner can export it.
+- **Source panel:** click a citation chip to open the cited page next to the chat with the passage highlighted (`GET /api/rag/documents/{id}/passages?page=N`, owner-checked). Ctrl/Cmd+K focuses the message box, there is a light/dark switch, and deleting a document has a 6-second undo.
 - **Upload experience:** drag and drop anywhere, browser-side type and size checks, a documents-used meter, status badges, and errors that show a short reference (the request id) you can quote.
 
 ## Data retention
@@ -425,6 +426,21 @@ DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if
 
 On Render's free tier the service sleeps after about 15 minutes idle and its disk is ephemeral, so
 use `DATABASE_URL` for anything you want to keep.
+
+---
+
+## Free-tier limits at a glance
+
+| Limit | Value |
+|---|---|
+| Upload size / pages / documents per user | see the in-app meter (defaults 5 MB, 50 pages, 5 documents) |
+| Concurrent PDF parses | 2 (`DOCUMENTS_MAX_CONCURRENT_PARSES`) |
+| Chat, ask, upload, re-index | 20 requests per minute per user or IP |
+| Sign-in and registration | 10 per minute per IP |
+| Sleep | Render free tier sleeps after about 15 minutes idle; first request can take up to a minute |
+| AI quota | Gemini free tier; when it is used up, answers say "try again in a minute" |
+
+See [PRIVACY.md](PRIVACY.md) for what is stored where.
 
 ---
 
