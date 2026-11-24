@@ -1,0 +1,11 @@
+# SITE_ADDRESS is a domain name, or <public-ip-with-dashes>.sslip.io when you have no domain
+# (for example 203-0-113-10.sslip.io). Caddy gets and renews a free certificate by itself.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy app:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+	}
+}

@@ -450,6 +450,12 @@ Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL
 
 ---
 
+## Deploying on Oracle Cloud (Always Free)
+
+A free Arm VM runs the app, HTTPS (Caddy) and PostgreSQL with pgvector, so your data is kept. Step-by-step
+guide: [docs/deploy-oracle.md](docs/deploy-oracle.md). Files: `deploy/docker-compose.oracle.yml`,
+`deploy/Caddyfile`, `deploy/oracle.env.example`.
+
 ## Deploying on Render (free tier)
 
 1. Set **Health Check Path** to `/actuator/health/liveness` (Settings → Health & Alerts).
