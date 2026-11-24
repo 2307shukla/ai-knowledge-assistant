@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)
 ![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3.5-6DB33F)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-6DB33F)
 ![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0-6DB33F)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -394,6 +394,7 @@ To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a 
 - Logs are JSON with the request id. They contain ids and counts only: no document text, prompts, API keys, e-mail addresses or usernames.
 - No secrets in the repository. Every secret is an environment variable (see `.env.example`). User API keys are AES-GCM encrypted.
 - The container runs as a non-root user.
+- Dependencies are scanned with Trivy in CI and the build fails on fixable HIGH or CRITICAL issues. Three Spring Framework issues that are fixed only in Spring Boot 4 are listed in `.trivyignore` with a reason and an expiry date (2027-01-31); the move to Spring Boot 4 is planned for Phase 2.
 
 To delete legacy ownerless embeddings after checking the count (PostgreSQL):
 
@@ -406,7 +407,7 @@ DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if
 
 ## Licences
 
-Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate, H2, OpenPDF or AspectJ return, and a licence gate checks the CycloneDX SBOM (uploaded with each CI run). The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
+Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate, H2, OpenPDF or AspectJ return, and a licence gate checks the CycloneDX SBOM (uploaded with each CI run) and fails on any licence that is not approved. LatencyUtils (CC0) is excluded from Micrometer for this reason. The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
 
 ---
 
