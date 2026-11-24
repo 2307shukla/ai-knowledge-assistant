@@ -54,8 +54,9 @@ public class GuestChatController {
         try {
             reply = chatModel.call(text);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
-                    .body(Map.of("error", "The AI provider failed: " + e.getMessage()));
+            org.slf4j.LoggerFactory.getLogger(GuestChatController.class).error("Guest chat failed", e);
+            return ResponseEntity.status(com.abhijeet.ai_knowledge_assistant.exception.ErrorMessages.statusFor(e))
+                    .body(Map.of("error", com.abhijeet.ai_knowledge_assistant.exception.ErrorMessages.forUser(e)));
         }
 
         session.setAttribute(COUNTER, count + 1);

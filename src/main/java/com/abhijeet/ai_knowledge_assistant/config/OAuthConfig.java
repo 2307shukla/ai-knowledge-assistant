@@ -48,7 +48,7 @@ public class OAuthConfig {
 
         } catch (Exception e) {
             log.error("Google OAuth configuration is invalid, disabling Google login: {}",
-                    e.getMessage());
+                    e.getClass().getSimpleName());
             return registrationId -> null;
         }
     }

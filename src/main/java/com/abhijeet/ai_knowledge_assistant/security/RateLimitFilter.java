@@ -59,6 +59,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return path.equals("/api/guest/chat")
                 || path.equals("/api/rag/ask")
+                || path.equals("/api/rag/upload")
+                || path.endsWith("/reindex")
                 || path.endsWith("/messages")
                 || path.endsWith("/messages/stream");
     }
