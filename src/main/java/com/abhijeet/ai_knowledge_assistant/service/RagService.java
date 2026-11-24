@@ -130,6 +130,17 @@ public class RagService {
                 .filterExpression(ownerFilter(owner, documentIds))
                 .build();
         List<Document> results = vectorStore.similaritySearch(request);
+        if (log.isInfoEnabled()) {
+            // Scores only (numbers): never the question or passage text. Used to tune app.rag.min-score.
+            StringBuilder scores = new StringBuilder();
+            for (Document d : results) {
+                if (scores.length() > 0) {
+                    scores.append(", ");
+                }
+                scores.append(d.getScore() == null ? "n/a" : String.format(java.util.Locale.ROOT, "%.3f", d.getScore()));
+            }
+            log.info("Retrieval scores [{}] with cutoff {}", scores, minScore);
+        }
         List<SourceHit> hits = new ArrayList<>();
         for (Document d : results) {
             Map<String, Object> m = d.getMetadata();
