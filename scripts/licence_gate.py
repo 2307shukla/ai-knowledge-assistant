@@ -5,7 +5,7 @@ Policy (see README > Licences):
   * allowed: MIT, Apache-2.0, BSD family
   * approved exception: Jakarta APIs (EPL-2.0, often dual-licensed with GPL-2.0 + Classpath Exception)
   * anything copyleft (GPL, LGPL, AGPL, MPL, EPL outside Jakarta, CDDL) fails the build
-  * anything else is listed as "needs review" in the job summary but does not fail
+  * anything else (for example CC0 or public domain) fails too, until it is approved and added here
 """
 import json
 import os
@@ -65,7 +65,7 @@ def main(path):
     if summary:
         with open(summary, "a", encoding="utf-8") as f:
             f.write("## Licence gate\n```\n" + text + "\n```\n")
-    return 1 if rows["banned"] else 0
+    return 1 if rows["banned"] or rows["review"] else 0
 
 
 if __name__ == "__main__":
