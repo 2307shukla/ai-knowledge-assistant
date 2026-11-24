@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,18 +22,15 @@ public class ByokService {
     private final UserRepository users;
     private final SecretCipher cipher;
     private final String baseUrl;
-    private final String completionsPath;
     private final String model;
 
     public ByokService(UserRepository users,
                        SecretCipher cipher,
                        @Value("${spring.ai.openai.base-url}") String baseUrl,
-                       @Value("${spring.ai.openai.chat.completions-path:/chat/completions}") String completionsPath,
                        @Value("${spring.ai.openai.chat.options.model}") String model) {
         this.users = users;
         this.cipher = cipher;
         this.baseUrl = baseUrl;
-        this.completionsPath = completionsPath;
         this.model = model;
     }
 
@@ -74,20 +70,15 @@ public class ByokService {
         }
         try {
             String plain = cipher.decrypt(user.getApiKeyEncrypted());
-            OpenAiApi api = OpenAiApi.builder()
-                    .baseUrl(baseUrl)
-                    .apiKey(plain)
-                    .completionsPath(completionsPath)
-                    .build();
-
-            OpenAiChatOptions options = OpenAiChatOptions.builder()
-                    .model(model)
-                    .temperature(0.7)
-                    .build();
-
+            // Spring AI 2 talks to the provider through the official OpenAI SDK, which appends
+            // /chat/completions to the base URL (Gemini's OpenAI-compatible endpoint has no /v1).
             return OpenAiChatModel.builder()
-                    .openAiApi(api)
-                    .defaultOptions(options)
+                    .options(OpenAiChatOptions.builder()
+                            .baseUrl(baseUrl)
+                            .apiKey(plain)
+                            .model(model)
+                            .temperature(0.7)
+                            .build())
                     .build();
         } catch (Exception e) {
             // Deliberately does not include the key in the message.
