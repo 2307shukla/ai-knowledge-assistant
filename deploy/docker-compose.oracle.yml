@@ -1,0 +1,68 @@
+# Production-style stack for a single Linux VM (written for Oracle Cloud Always Free, any Docker host works):
+#   Caddy (automatic HTTPS)  ->  the app  ->  PostgreSQL with pgvector (data kept in a volume)
+#
+# Run from the repository root:
+#   cp deploy/oracle.env.example deploy/.env   # then edit the values
+#   docker compose -f deploy/docker-compose.oracle.yml --env-file deploy/.env up -d --build
+#
+# Only Caddy publishes ports (80 and 443). The app and the database are reachable only inside the
+# compose network. All images are free and permissively licensed (Caddy: Apache-2.0, PostgreSQL and
+# pgvector: PostgreSQL licence).
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    build:
+      context: ..
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      # A 12 GB VM has plenty of room; keep the JVM well inside the container.
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60"
+      DATABASE_URL: "postgresql://assistant:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/assistant"
+      AI_API_KEY: ${AI_API_KEY:-}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in deploy/.env}
+      APP_RAG_MIN_SCORE: ${APP_RAG_MIN_SCORE:-0.55}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/liveness"]
+      interval: 15s
+      timeout: 3s
+      start_period: 90s
+      retries: 6
+
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: assistant
+      POSTGRES_USER: assistant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assistant -d assistant"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
