@@ -12,7 +12,7 @@ import com.abhijeet.ai_knowledge_assistant.repository.UserRepository;
 import com.abhijeet.ai_knowledge_assistant.service.ChatPersistence;
 import com.abhijeet.ai_knowledge_assistant.service.ChatService;
 import com.abhijeet.ai_knowledge_assistant.util.InputSanitizer;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -48,7 +48,7 @@ public class ConversationController {
     private final UserRepository users;
     private final ChatService chatService;
     private final ChatPersistence persistence;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     private final TaskExecutor taskExecutor;
 
     public ConversationController(ConversationRepository conversations,
@@ -56,7 +56,7 @@ public class ConversationController {
                                   UserRepository users,
                                   ChatService chatService,
                                   ChatPersistence persistence,
-                                  ObjectMapper objectMapper,
+                                  JsonMapper objectMapper,
                                   TaskExecutor taskExecutor) {
         this.conversations = conversations;
         this.messages = messages;

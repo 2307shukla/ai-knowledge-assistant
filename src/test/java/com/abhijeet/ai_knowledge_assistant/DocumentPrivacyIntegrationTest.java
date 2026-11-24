@@ -6,13 +6,13 @@ import com.abhijeet.ai_knowledge_assistant.repository.UserRepository;
 import com.abhijeet.ai_knowledge_assistant.service.RagService;
 import com.abhijeet.ai_knowledge_assistant.support.FakeAiConfig;
 import com.abhijeet.ai_knowledge_assistant.support.TestPdfs;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -55,7 +55,7 @@ class DocumentPrivacyIntegrationTest {
     @Autowired
     private FakeAiConfig.RecordingChatModel chat;
 
-    private final ObjectMapper json = new ObjectMapper();
+    private final JsonMapper json = JsonMapper.builder().build();
     private String alice;
     private String bob;
     private String aliceDoc;

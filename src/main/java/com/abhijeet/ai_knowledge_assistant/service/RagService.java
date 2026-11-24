@@ -3,8 +3,8 @@ package com.abhijeet.ai_knowledge_assistant.service;
 import com.abhijeet.ai_knowledge_assistant.domain.DocumentChunk;
 import com.abhijeet.ai_knowledge_assistant.domain.KnowledgeDocument;
 import com.abhijeet.ai_knowledge_assistant.rag.SourceHit;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -157,8 +157,8 @@ public class RagService {
         }
         Map<String, StoredDocument> byId = new HashMap<>();
         try {
-            JsonNode root = new ObjectMapper().readTree(storePath.toFile());
-            root.fields().forEachRemaining(entry -> {
+            JsonNode root = JsonMapper.builder().build().readTree(storePath.toFile());
+            root.properties().forEach(entry -> {
                 JsonNode node = entry.getValue();
                 JsonNode meta = node.path("metadata");
                 String documentId = meta.path(DOCUMENT_ID).asText(null);
