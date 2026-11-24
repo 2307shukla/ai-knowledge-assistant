@@ -88,6 +88,6 @@ jobs:
       # CRITICAL vulnerabilities in the application's libraries.
       - name: Security scan (Trivy)
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/.trivyignore.yaml:/ignore.yaml:ro" \
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/.trivyignore:/ignore/.trivyignore:ro" \
             aquasec/trivy:latest image --scanners vuln --pkg-types library --severity HIGH,CRITICAL \
-            --ignore-unfixed --ignorefile /ignore.yaml --exit-code 1 --no-progress ai-knowledge-assistant:ci
+            --ignore-unfixed --ignorefile /ignore/.trivyignore --exit-code 1 --no-progress ai-knowledge-assistant:ci
