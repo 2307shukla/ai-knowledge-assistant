@@ -140,6 +140,34 @@ public class DocumentService {
         return documents.findByOwnerInOrderByCreatedAtDesc(List.of(owner, KnowledgeDocument.PUBLIC));
     }
 
+    /** Most documents one question may be limited to. */
+    public static final int MAX_SCOPE = 20;
+
+    /**
+     * Checks that the caller may read every id (their own or the public sample) and returns them.
+     * One unreadable id fails the whole request with 404, exactly like a missing document, so the
+     * answer never reveals whether another user's document exists.
+     */
+    public java.util.Set<String> requireReadable(String owner, java.util.Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Set.of();
+        }
+        if (ids.size() > MAX_SCOPE) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Choose at most " + MAX_SCOPE + " documents.");
+        }
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (String id : ids) {
+            if (id == null || get(owner, id).isEmpty()) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Document not found.");
+            }
+            out.add(id);
+        }
+        return out;
+    }
+
     /** One document the caller may read: their own or the public sample. Anything else: empty. */
     @Transactional(readOnly = true)
     public Optional<KnowledgeDocument> get(String owner, String id) {
@@ -248,7 +276,8 @@ public class DocumentService {
             rag.index(document);
         } catch (RuntimeException e) {
             // No owner or document text in the log: the id is enough to investigate.
-            log.error("Embedding failed for document id={}", document.getId(), e);
+            log.error("Embedding failed for document id={} ({})", document.getId(),
+                    com.abhijeet.ai_knowledge_assistant.exception.GlobalExceptionHandler.describe(e));
             List<String> partial = document.getChunks().stream()
                     .map(DocumentChunk::getVectorId).filter(Objects::nonNull).toList();
             try {

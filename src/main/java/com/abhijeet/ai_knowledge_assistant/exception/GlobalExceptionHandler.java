@@ -115,7 +115,7 @@ public class GlobalExceptionHandler {
      * Where a failure happened, without its message: provider and driver messages can contain keys,
      * file names or document text. The exception type and first application frame are enough to debug.
      */
-    static String describe(Throwable ex) {
+    public static String describe(Throwable ex) {
         String where = "unknown";
         for (StackTraceElement frame : ex.getStackTrace()) {
             if (frame.getClassName().startsWith("com.abhijeet")) {

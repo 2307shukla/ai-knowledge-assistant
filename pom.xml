@@ -151,6 +151,17 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!-- Tests use a bag-of-words fake embedding, whose scores are not comparable to a real
+                 model's, so the production relevance floor is lowered here; tests of the floor set their own. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <app.rag.min-score>0.0</app.rag.min-score>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
             <!-- Lint (PMD: BSD-style licence). Fails the build on priority 1-2 violations. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

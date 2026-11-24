@@ -34,6 +34,7 @@ import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/conversations")
@@ -139,8 +140,9 @@ public class ConversationController {
     /**
      * @param content      the message
      * @param useDocuments answer from the user's own documents (with citations) when true
+     * @param documentIds  optional: limit the answer to these documents (all of the user's, if empty)
      */
-    public record MessageRequest(String content, Boolean useDocuments) {
+    public record MessageRequest(String content, Boolean useDocuments, List<String> documentIds) {
 
         boolean documents() {
             return Boolean.TRUE.equals(useDocuments);
@@ -160,10 +162,13 @@ public class ConversationController {
         }
 
         String text = validate(request);
+        Set<String> scope = chatService.scope(user, request.documentIds());
 
         messages.save(new ChatMessage(conversation, "user", text));
-        ChatService.Reply reply = chatService.reply(user, conversation,
-                chatService.sourcesFor(user, text, request.documents()));
+        List<SourceHit> found = chatService.sourcesFor(user, text, request.documents(), scope);
+        ChatService.Reply reply = request.documents() && found.isEmpty()
+                ? new ChatService.Reply(ChatService.NOT_FOUND_REPLY, found)
+                : chatService.reply(user, conversation, found);
         String answer = reply.persisted();
         messages.save(new ChatMessage(conversation, "assistant", answer));
 
@@ -194,6 +199,7 @@ public class ConversationController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found"));
 
         String text = validate(request);
+        final Set<String> scope = chatService.scope(user, request.documentIds());
 
         final Long conversationId = conversation.getId();
         persistence.append(conversationId, "user", text, text);
@@ -208,23 +214,31 @@ public class ConversationController {
                 MDC.setContextMap(logContext);
             }
             try {
-                List<SourceHit> sources = chatService.sourcesFor(user, text, useDocuments);
+                List<SourceHit> sources = chatService.sourcesFor(user, text, useDocuments, scope);
                 if (useDocuments) {
                     // Sent before the answer so the client can show where it comes from.
                     emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(
                             Map.of("sources", RagController.sources(sources)))));
                 }
-                ChatService.Reply reply = chatService.streamReply(user, conversationId, sources, chunk -> {
-                    try {
-                        emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(chunk)));
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                });
+                ChatService.Reply reply;
+                if (useDocuments && sources.isEmpty()) {
+                    // Nothing relevant in the documents: say so instead of letting the model guess.
+                    emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(ChatService.NOT_FOUND_REPLY)));
+                    reply = new ChatService.Reply(ChatService.NOT_FOUND_REPLY, sources);
+                } else {
+                    reply = chatService.streamReply(user, conversationId, sources, chunk -> {
+                        try {
+                            emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(chunk)));
+                        } catch (IOException e) {
+                            throw new UncheckedIOException(e);
+                        }
+                    });
+                }
                 persistence.append(conversationId, "assistant", reply.persisted(), null);
                 emitter.complete();
             } catch (Exception e) {
-                log.error("Streaming reply failed for conversation {}", conversationId, e);
+                log.error("Streaming reply failed for conversation {} ({})", conversationId,
+                        com.abhijeet.ai_knowledge_assistant.exception.GlobalExceptionHandler.describe(e));
                 try {
                     emitter.send(SseEmitter.event().data(objectMapper.writeValueAsString(
                             Map.of("error", ErrorMessages.forUser(e)))));

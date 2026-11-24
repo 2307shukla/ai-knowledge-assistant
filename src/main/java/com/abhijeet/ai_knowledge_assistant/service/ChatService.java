@@ -37,19 +37,32 @@ public class ChatService {
     private final ConversationRepository conversations;
     private final ByokService byok;
     private final RagService rag;
+    private final DocumentService documents;
+
+    /** Fixed answer when the documents hold nothing relevant: the model is not asked to guess. */
+    public static final String NOT_FOUND_REPLY =
+            "I couldn't find this in your documents. Try rephrasing, pick other documents, or turn off "
+                    + "\"Use my documents\" to ask me without them.";
 
     public ChatService(ChatModel chatModel,
                        ChatMessageRepository messages,
                        MemoryRepository memories,
                        ConversationRepository conversations,
                        ByokService byok,
-                       RagService rag) {
+                       RagService rag,
+                       DocumentService documents) {
         this.chatModel = chatModel;
         this.messages = messages;
         this.memories = memories;
         this.conversations = conversations;
         this.byok = byok;
         this.rag = rag;
+        this.documents = documents;
+    }
+
+    /** The documents a question is limited to; fails with 404 if any is not the caller's. */
+    public java.util.Set<String> scope(User user, java.util.Collection<String> documentIds) {
+        return documents.requireReadable(user.getUsername(), documentIds);
     }
 
     /** A reply and the passages it was grounded on (empty when documents were not used). */
@@ -66,10 +79,15 @@ public class ChatService {
      * when documents are not requested. The owner filter is applied by RagService.
      */
     public List<SourceHit> sourcesFor(User user, String question, boolean useDocuments) {
+        return sourcesFor(user, question, useDocuments, java.util.Set.of());
+    }
+
+    public List<SourceHit> sourcesFor(User user, String question, boolean useDocuments,
+                                      java.util.Set<String> scope) {
         if (!useDocuments || question == null || question.isBlank()) {
             return List.of();
         }
-        return rag.search(question, user.getUsername(), RagService.TOP_K);
+        return rag.search(question, user.getUsername(), RagService.TOP_K, scope);
     }
 
     /** The user's own key when they have one, otherwise the shared key. */

@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -53,9 +54,13 @@ public class RagService {
     private final SimpleVectorStore fileStore;
     private final Path storePath;
 
+    private final double minScore;
+
     public RagService(EmbeddingModel embeddingModel,
                       ObjectProvider<VectorStore> providedStore,
-                      @Value("${app.vector-store.path:./data/vector-store.json}") String path) {
+                      @Value("${app.vector-store.path:./data/vector-store.json}") String path,
+                      @Value("${app.rag.min-score:0.25}") double minScore) {
+        this.minScore = minScore;
         VectorStore custom = providedStore.getIfAvailable();
         if (custom != null) {
             this.vectorStore = custom;
@@ -107,13 +112,22 @@ public class RagService {
      * sample only. Numbered from 1 for citation.
      */
     public List<SourceHit> search(String question, String owner, int topK) {
+        return search(question, owner, topK, Set.of());
+    }
+
+    /**
+     * Like {@link #search(String, String, int)}, limited to the given documents when the set is not
+     * empty. The owner filter always applies too, so an id the caller may not read returns nothing.
+     * Passages scoring below {@code app.rag.min-score} are dropped: weak matches are not evidence.
+     */
+    public List<SourceHit> search(String question, String owner, int topK, Set<String> documentIds) {
         if (owner == null || owner.isBlank()) {
             throw new IllegalArgumentException("A search always needs an owner");
         }
         SearchRequest request = SearchRequest.builder()
                 .query(question)
                 .topK(topK)
-                .filterExpression(ownerFilter(owner))
+                .filterExpression(ownerFilter(owner, documentIds))
                 .build();
         List<Document> results = vectorStore.similaritySearch(request);
         List<SourceHit> hits = new ArrayList<>();
@@ -124,15 +138,25 @@ public class RagService {
             if (!owner.equals(docOwner) && !KnowledgeDocument.PUBLIC.equals(docOwner)) {
                 continue;
             }
+            if (!documentIds.isEmpty() && !documentIds.contains(String.valueOf(m.get(DOCUMENT_ID)))) {
+                continue;
+            }
+            if (d.getScore() != null && d.getScore() < minScore) {
+                continue;
+            }
             hits.add(new SourceHit(hits.size() + 1, String.valueOf(m.get(DOCUMENT_ID)),
                     String.valueOf(m.get(FILE)), integer(m.get(PAGE)), d.getText(), d.getScore()));
         }
         return hits;
     }
 
-    static Filter.Expression ownerFilter(String owner) {
+    static Filter.Expression ownerFilter(String owner, Set<String> documentIds) {
         FilterExpressionBuilder b = new FilterExpressionBuilder();
-        return b.in(OWNER, owner, KnowledgeDocument.PUBLIC).build();
+        if (documentIds.isEmpty()) {
+            return b.in(OWNER, owner, KnowledgeDocument.PUBLIC).build();
+        }
+        return b.and(b.in(OWNER, owner, KnowledgeDocument.PUBLIC),
+                b.in(DOCUMENT_ID, documentIds.toArray())).build();
     }
 
     static Map<String, Object> metadata(KnowledgeDocument document, DocumentChunk chunk) {
