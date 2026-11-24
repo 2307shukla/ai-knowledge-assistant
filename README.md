@@ -51,10 +51,12 @@ flowchart LR
     C --> EXP[PDF / CSV export]
     C --> ADM[Admin analytics]
     C --> RAG[RAG service]
-    RAG --> VS[(Vector store<br/>JSON on disk)]
+    C --> DOC[DocumentService<br/>limits · PDFBox · owner checks]
+    DOC --> RAG
+    RAG -->|owner filter on every search| VS[(Vector store<br/>pgvector or JSON file)]
     RAG --> AI
 
-    C --> DB[(H2 in-memory<br/>users · chats · memories)]
+    C --> DB[(HSQLDB in-memory or PostgreSQL<br/>users · chats · memories · documents)]
 ```
 
 **Request path for a streamed message:**
@@ -76,9 +78,11 @@ flowchart LR
 | **Authentication** | Spring Security form login, BCrypt, session cookies |
 | **Google sign-in** | OAuth2 (optional) — enabled by env vars, accounts keyed on verified email |
 | **Role-based access** | `ROLE_ADMIN` enforced server-side for admin pages and APIs |
-| **Conversation history** | JPA entities, per-user scoping on every query |
+| **Conversation history** | Spring Data JDBC, per-user scoping on every query |
 | **Memory** | User-authored facts injected into the system prompt, individually deletable |
-| **Document Q&A (RAG)** | PDF → chunks → embeddings → similarity search |
+| **Private document library** | Upload, list, open, delete and re-index your own PDFs; nobody else can see them |
+| **Document Q&A (RAG)** | PDF → page-by-page text → chunks → embeddings → owner-filtered similarity search |
+| **Citations** | Answers cite file and page, e.g. `[1] handbook.pdf, page 3`; chat shows source chips |
 | **Hallucination guard** | Token-overlap score between answer and retrieved context |
 | **Vector persistence** | Store saved to disk, reloaded on boot without re-embedding |
 | **Structured JSON output** | `ChatClient.entity()` with a typed record |
@@ -87,38 +91,60 @@ flowchart LR
 | **Rate limiting** | Bucket4j token bucket, 20 req/min per user or IP |
 | **BYOK** | Users can bring their own API key — AES-GCM encrypted, write-only, masked |
 | **Input sanitisation** | Control characters stripped, hard length caps |
-| **Global error handling** | `@RestControllerAdvice` returning readable JSON |
+| **Global error handling** | One JSON error shape with a request id; no internals leak |
+| **Structured logs** | Log4j2 JSON (ECS) with the request id on every line; no personal data or document text |
 | **Markdown + code highlighting** | `marked` + DOMPurify + highlight.js |
 | **Voice** | Web Speech API for input and text-to-speech output |
-| **Export** | Conversation to CSV or PDF (OpenPDF) |
-| **Health check** | `/actuator/health` |
+| **Export** | Conversation to CSV (formula-safe) or PDF (Apache PDFBox) |
+| **Health check** | `/actuator/health/liveness` — no database work, for Render's probe |
 | **API documentation** | Swagger UI at `/swagger-ui.html` |
-| **CI** | GitHub Actions: build, test, Docker build, container smoke test |
+| **CI** | GitHub Actions: build, tests, PMD lint, banned-dependency and licence gates, Trivy scan, zero-config container start |
 
 ---
 
 ## Quick start
 
+It works out of the box: no database, no Google login and no AI key are needed to start.
+
 ```bash
-# 1. Get a free Gemini key - no credit card
-#    https://aistudio.google.com/apikey
-
-export AI_API_KEY=your-key          # Windows: set AI_API_KEY=your-key
-
-# 2. Run
-./mvnw spring-boot:run
+git clone https://github.com/2307shukla/ai-knowledge-assistant.git
+cd ai-knowledge-assistant
+./mvnw spring-boot:run          # Windows: mvnw.cmd spring-boot:run
 ```
 
 Open http://localhost:8080 and sign in with `demo` / `demo123`.
 
-### Or with Docker
+To get answers, add a free Gemini key (no credit card, https://aistudio.google.com/apikey) in one of two ways:
+
+- **In the app:** sidebar → *Your API key* → paste → Save (each user can use their own key), or
+- **For everyone:** `export AI_API_KEY=your-key` before starting (Windows: `set AI_API_KEY=your-key`).
+
+### Or with Docker (one command)
 
 ```bash
-docker build -t ai-knowledge-assistant .
-docker run -p 8080:8080 -e AI_API_KEY=your-key ai-knowledge-assistant
+docker compose up --build                          # http://localhost:8080, built-in database
+docker compose --profile postgres up --build       # also http://localhost:8081 on local PostgreSQL + pgvector
 ```
 
+Optional settings go in a `.env` file: copy `.env.example`, which lists every variable. Never commit `.env`.
+
 ---
+
+## Environment variables
+
+All optional. The app starts with none of them.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AI_API_KEY` | unset | Shared Gemini key. Without it, users add their own key in the app. |
+| `DATABASE_URL` | built-in HSQLDB (in memory) | PostgreSQL with pgvector, pasted as the provider shows it. Enables persistence. |
+| `APP_ENCRYPTION_KEY` | random per start | Base64 of 32 bytes; encrypts saved user keys. Set it, or saved keys are lost on restart. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | unset | Google sign-in. Without them only password login and guest mode appear. |
+| `DOCUMENTS_MAX_BYTES` | `5242880` (5 MB) | Largest PDF accepted. |
+| `DOCUMENTS_MAX_PAGES` | `50` | Most pages per PDF. |
+| `DOCUMENTS_MAX_PER_USER` | `20` | Documents each user may keep. |
+| `DOCUMENTS_MAX_CHUNKS` | `400` | Most passages per document (bounds embedding calls). |
+| `VECTOR_STORE_PATH` | `./data/vector-store.json` | File used for embeddings when there is no PostgreSQL. |
 
 ## Configuration
 
@@ -194,15 +220,37 @@ Interactive docs: **https://ai-knowledge-assistant-378a.onrender.com/swagger-ui.
 | `GET` | `/api/conversations/{id}/export.pdf` | Export conversation as PDF |
 | `GET` / `POST` / `DELETE` | `/api/memories` | Manage memory |
 | `GET` / `POST` / `DELETE` | `/api/keys` | BYOK: manage your own provider key |
-| `POST` | `/api/rag/upload` | Upload and index a PDF |
-| `GET` | `/api/rag/ask` | Answer from documents, with grounding score |
+| `POST` | `/api/rag/upload` | Upload a PDF to your private library |
+| `GET` | `/api/rag/documents` | Your documents and the public sample, with limits |
+| `GET` | `/api/rag/documents/{id}` | One document (404 if it is not yours) |
+| `DELETE` | `/api/rag/documents/{id}` | Delete your document and its embeddings |
+| `POST` | `/api/rag/documents/{id}/reindex` | Re-embed your document from its stored text |
+| `GET` | `/api/rag/ask` | Answer from your documents, with page citations and grounding score |
 | `POST` | `/api/insights` | Structured JSON answer |
 | `POST` | `/api/tools/ask` | Function calling |
 | `POST` | `/api/guest/chat` | Anonymous trial (5 messages) |
 | `GET` | `/api/admin/stats` | Aggregate analytics (ADMIN only) |
-| `GET` | `/actuator/health` | Health check |
+| `GET` | `/actuator/health/liveness` | Liveness probe (no database work) |
 
 Unauthenticated API calls return **401 JSON**; browser navigations redirect to the login page.
+
+To answer a chat message from your documents, send `{"content": "...", "useDocuments": true}`; the reply includes `sources` (file, page, snippet) and the streamed endpoint sends them as its first event.
+
+Every error has one shape, and the request id matches the server log line:
+
+```json
+{ "status": 413, "error": "The PDF has 80 pages. The limit is 50.", "requestId": "4f0c…" }
+```
+
+---
+
+## Document library and privacy
+
+- **Private by default.** Each document belongs to the user who uploaded it. Search, chat, list, get, delete and re-index all check the owner. Another user's document id answers **404**, exactly like an id that does not exist, so ids cannot be probed.
+- **Two layers.** The database lookup is scoped to the owner, and every vector carries an `owner` field that each similarity search filters on (`owner IN (me, public)`). Results are checked again before use.
+- **Public sample.** The bundled sample document is readable by everyone and cannot be changed or deleted by anyone.
+- **Legacy vectors are quarantined.** Embeddings created before this version have no owner. The filter excludes them from every search and no API lists them. The start-up log reports how many there are (a count only).
+- **Upload rules.** PDF only, verified by its `%PDF-` signature, not the file name. Size, page and per-user limits are checked before any text is extracted; encrypted or damaged PDFs are refused with a clear message. Pages are read one at a time to stay well inside 512 MB.
 
 ### Hallucination guard
 
@@ -267,9 +315,9 @@ Throughput plateaus around 130 req/s while p95 rises ~4× — the saturation poi
 
 ## Persistence
 
-| Data | Default (H2) | With `DATABASE_URL` → Postgres |
+| Data | Default (HSQLDB) | With `DATABASE_URL` → Postgres |
 |---|---|---|
-| Users, conversations, memories | H2 in-memory — ❌ recreated on boot | ✅ persistent |
+| Users, conversations, memories, document list | HSQLDB in-memory — ❌ recreated on boot (document list rebuilt from the vector file) | ✅ persistent |
 | Document embeddings | JSON file (`data/vector-store.json`) — ✅ reloaded, not re-embedded | ✅ `PgVectorStore` (`vector_store` table) |
 
 Embeddings are the expensive part — each chunk costs an API call. In file mode the store is written after every index operation and reloaded on startup.
@@ -296,10 +344,13 @@ A Postgres database is detected at startup and embeddings switch to `PgVectorSto
 src/main/java/com/abhijeet/ai_knowledge_assistant/
 ├── config/        ChatClient, OpenAPI, demo data
 ├── controller/    chat, auth, memory, RAG, admin, export, tools
-├── domain/        User, Conversation, ChatMessage, Memory
-├── repository/    Spring Data JPA interfaces
-├── security/      SecurityConfig, UserDetailsService, rate limiter
-├── service/       ChatService, ChatPersistence, RagService
+├── domain/        User, Conversation, ChatMessage, Memory, KnowledgeDocument, DocumentChunk
+├── exception/     error JSON shape and user-safe messages
+├── export/        PDFBox writer for conversation export
+├── rag/           chunking, citations, prompt rules
+├── repository/    Spring Data JDBC interfaces (schema in schema.sql)
+├── security/      SecurityConfig, UserDetailsService, rate limiter, request ids
+├── service/       ChatService, ChatPersistence, DocumentService, RagService
 ├── tools/         @Tool methods for function calling
 └── util/          InputSanitizer, GroundingCheck
 ```
@@ -323,12 +374,47 @@ To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a 
 
 ## Known limitations
 
-- **H2 is in-memory by default.** Accounts and chats reset when the container restarts unless `DATABASE_URL` points at Postgres (see [Persistence](#persistence)).
+- **HSQLDB is in-memory by default.** Accounts and chats reset when the container restarts unless `DATABASE_URL` points at Postgres (see [Persistence](#persistence)).
 - **CSRF tokens are disabled** for the JSON single-page UI. The session cookie is `SameSite=Lax`, so browsers don't send it on cross-site POST/PUT/DELETE requests, which blocks classic CSRF. Production would add `CookieCsrfTokenRepository` with an `X-XSRF-TOKEN` header as well.
 - **Rate limiting is per-instance.** Buckets live in memory; multiple instances would need Redis.
 - **Prompt injection is not solved.** The system prompt is server-controlled and the model has no tools that act on untrusted input, but no filter reliably prevents injection.
 - **Structured output is model-dependent.** Small models fail the schema; the endpoint returns 502 rather than nulls when that happens.
 - **Demo accounts are public** by design, so do not store anything private in them.
+- **Scanned PDFs are not supported.** There is no OCR; image-only PDFs are refused with a message.
+
+---
+
+## Security notes
+
+- Authentication and authorisation on every endpoint; documents and conversations are always loaded with the caller as owner.
+- SQL only through Spring Data derived queries or bound parameters; no string-built SQL with user input.
+- Input limits: question length, message length, upload size, pages, document count, rate limit (20 requests/minute per user or IP covers chat, ask, upload and re-index).
+- File names are reduced to a display name (no paths, control or markup characters) and are never used as file paths.
+- Errors return a short message and a request id. Stack traces, exception names, SQL and provider responses stay in the server log.
+- Logs are JSON with the request id. They contain ids and counts only: no document text, prompts, API keys, e-mail addresses or usernames.
+- No secrets in the repository. Every secret is an environment variable (see `.env.example`). User API keys are AES-GCM encrypted.
+- The container runs as a non-root user.
+
+To delete legacy ownerless embeddings after checking the count (PostgreSQL):
+
+```sql
+SELECT COUNT(*) FROM vector_store WHERE metadata->>'owner' IS NULL;  -- check first
+DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if you are sure
+```
+
+---
+
+## Licences
+
+Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate, H2, OpenPDF or AspectJ return, and a licence gate checks the CycloneDX SBOM (uploaded with each CI run). The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
+
+---
+
+## Deploying on Render (free tier)
+
+1. Set **Health Check Path** to `/actuator/health/liveness` (Settings → Health & Alerts).
+2. Set `AI_API_KEY`, `APP_ENCRYPTION_KEY` and, for persistence, `DATABASE_URL`.
+3. Design decisions are recorded in [`docs/adr`](docs/adr).
 
 ---
 
