@@ -21,6 +21,8 @@
         <spring-ai.version>1.0.9</spring-ai.version>
         <!-- Security fixes newer than Spring Boot 3.5's managed versions (see Trivy in CI) -->
         <jackson-bom.version>2.21.7</jackson-bom.version>
+        <tomcat.version>10.1.59</tomcat.version>
+        <postgresql.version>42.7.15</postgresql.version>
     </properties>
 
     <dependencyManagement>
