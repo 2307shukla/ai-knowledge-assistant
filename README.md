@@ -3,12 +3,21 @@
 ![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)
 ![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.10-6DB33F)
-![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0-6DB33F)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![Spring AI](https://img.shields.io/badge/Spring%20AI-2.0.3-6DB33F)
+![License](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
 
-A production-shaped AI chat application built with **Java 21**, **Spring Boot 3**, **Spring AI** and **Spring Security** — streamed responses, per-user history, persistent memory, document Q&A and admin analytics. Runs entirely on free-tier infrastructure.
+A production-shaped AI chat application built with **Java 21**, **Spring Boot 4**, **Spring AI** and **Spring Security** — streamed responses, per-user history, persistent memory, document Q&A and admin analytics. Runs entirely on free-tier infrastructure.
 
 **Live demo:** https://ai-knowledge-assistant-378a.onrender.com
+
+## At a glance
+
+- Chat with your own PDFs and text files and get answers with page citations.
+- Says "I couldn't find this" instead of guessing when your documents don't have the answer.
+- Each person sees only their own documents; sign-in, saved chats and free-tier limits included.
+- Built with Java, Spring Boot, Spring AI, PostgreSQL with pgvector and Google Gemini.
+- Free to run: free hosting, free AI tier, and only permissively licensed libraries.
+- Ready to deploy on Render or on Oracle Cloud's free tier (see below).
 
 | Account | Username | Password | Role |
 |---|---|---|---|
@@ -472,4 +481,4 @@ guide: [docs/deploy-oracle.md](docs/deploy-oracle.md). Files: `deploy/docker-com
 
 ## Licence
 
-MIT
+All rights reserved. The source is published for viewing only; see [LICENSE](LICENSE). Dependencies keep their own permissive licences (see Licences above).
