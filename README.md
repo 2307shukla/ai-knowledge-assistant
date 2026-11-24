@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/2307shukla/ai-knowledge-assistant/actions/workflows/ci.yml/badge.svg)
 ![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-6DB33F)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.10-6DB33F)
 ![Spring AI](https://img.shields.io/badge/Spring%20AI-1.0.0-6DB33F)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -153,8 +153,6 @@ Everything except the key is committed:
 ```properties
 spring.ai.openai.base-url=https://generativelanguage.googleapis.com/v1beta/openai
 spring.ai.openai.api-key=${AI_API_KEY:unset}
-spring.ai.openai.chat.completions-path=/chat/completions
-spring.ai.openai.embedding.embeddings-path=/embeddings
 spring.ai.openai.chat.options.model=gemini-3.6-flash
 spring.ai.openai.embedding.options.model=gemini-embedding-001
 app.vector-store.path=${VECTOR_STORE_PATH:./data/vector-store.json}
@@ -388,7 +386,10 @@ To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a 
 
 - Authentication and authorisation on every endpoint; documents and conversations are always loaded with the caller as owner.
 - SQL only through Spring Data derived queries or bound parameters; no string-built SQL with user input.
-- Input limits: question length, message length, upload size, pages, document count, rate limit (20 requests/minute per user or IP covers chat, ask, upload and re-index).
+- CSRF: browser requests that change state must come from this site (`Origin` and `Sec-Fetch-Site` are checked, in addition to the `SameSite=Lax` cookie).
+- Secrets: CI runs gitleaks and fails on a committed key or token.
+- Concurrency: at most 2 PDFs are parsed at once (`DOCUMENTS_MAX_CONCURRENT_PARSES`); others wait briefly, then get a 503 with a retry message.
+- Input limits: question length, message length, upload size, pages, document count, rate limit (20 requests/minute per user or IP covers chat, ask, upload and re-index; sign-in and registration allow 10 per minute per IP).
 - File names are reduced to a display name (no paths, control or markup characters) and are never used as file paths.
 - Errors return a short message and a request id. Stack traces, exception names, SQL and provider responses stay in the server log.
 - Logs are JSON with the request id. They contain ids and counts only: no document text, prompts, API keys, e-mail addresses or usernames.
@@ -405,9 +406,31 @@ DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if
 
 ---
 
+## Working with several documents
+
+- **Limit a question to chosen documents:** tick one or more documents in the sidebar (none ticked = all). The API takes `documents=id1,id2` on `GET /api/rag/ask` and `documentIds` on the chat endpoints. Every id is checked against the caller; one id that is not theirs fails the whole request with 404, the same as a missing document.
+- **"Not found in your documents":** passages scoring below `APP_RAG_MIN_SCORE` (default `0.25`) are dropped. When nothing is left, the answer says so and **the model is not called**, so it cannot guess. Raise the value to be stricter, lower it if good questions get refused.
+- **Summary and starter questions:** after an upload, `GET /api/rag/documents/{id}/summary` returns a three-sentence summary and three questions (one model call, then cached until the document is deleted or the service restarts).
+- **Export:** `GET /api/conversations/{id}/export.md` downloads a chat as Markdown (CSV and PDF already existed). Only the chat's owner can export it.
+- **Upload experience:** drag and drop anywhere, browser-side type and size checks, a documents-used meter, status badges, and errors that show a short reference (the request id) you can quote.
+
+## Data retention
+
+| Data | Where | Kept until |
+|---|---|---|
+| Account, chats, memories | Database (PostgreSQL if `DATABASE_URL` is set, otherwise in memory) | You delete them, or the in-memory database restarts |
+| Your PDFs | **Not stored.** Text is extracted, then the file is discarded | n/a |
+| Document passages and their embeddings | Database / `vector_store` | You delete the document (rows and vectors are removed together) |
+| Logs | Render's log stream | Render's log retention; ids and counts only |
+
+On Render's free tier the service sleeps after about 15 minutes idle and its disk is ephemeral, so
+use `DATABASE_URL` for anything you want to keep.
+
+---
+
 ## Licences
 
-Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate, H2, OpenPDF or AspectJ return, and a licence gate checks the CycloneDX SBOM (uploaded with each CI run) and fails on any licence that is not approved. LatencyUtils (CC0) is excluded from Micrometer for this reason. The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
+Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate ORM, H2, OpenPDF or AspectJ return (Hibernate Validator, Apache-2.0, is fine), and a licence gate checks the CycloneDX SBOM (uploaded with each CI run) and fails on any licence that is not approved. LatencyUtils (CC0) is excluded from Micrometer for this reason. The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
 
 ---
 

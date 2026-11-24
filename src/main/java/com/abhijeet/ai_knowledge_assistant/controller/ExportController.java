@@ -74,6 +74,31 @@ public class ExportController {
                 .body(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
 
+    @GetMapping("/{id}/export.md")
+    public ResponseEntity<byte[]> markdown(@PathVariable Long id, Authentication authentication) {
+        Conversation conversation = owned(id, authentication);
+        if (conversation == null) {
+            return ResponseEntity.notFound().build();
+        }
+        List<ChatMessage> history = messages.findByConversationOrderByIdAsc(conversation);
+        StringBuilder sb = new StringBuilder("# ").append(oneLine(conversation.getTitle())).append("\n\n")
+                .append("_Exported ").append(STAMP.format(Instant.now())).append(" UTC \u00b7 ")
+                .append(history.size()).append(" messages_\n");
+        for (ChatMessage message : history) {
+            sb.append("\n## ").append("user".equals(message.getRole()) ? "You" : "Assistant")
+                    .append(" \u00b7 ").append(STAMP.format(message.getCreatedAt())).append("\n\n")
+                    .append(message.getContent()).append('\n');
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"conversation-" + id + ".md\"")
+                .contentType(MediaType.parseMediaType("text/markdown; charset=UTF-8"))
+                .body(sb.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String oneLine(String value) {
+        return value == null ? "" : value.replaceAll("[\\r\\n]+", " ").strip();
+    }
+
     @GetMapping("/{id}/export.pdf")
     public ResponseEntity<byte[]> pdf(@PathVariable Long id, Authentication authentication) {
         Conversation conversation = owned(id, authentication);
@@ -98,7 +123,8 @@ public class ExportController {
                     .contentType(MediaType.APPLICATION_PDF)
                     .body(pdf.toBytes());
         } catch (IOException e) {
-            log.error("PDF export failed for conversation id={}", id, e);
+            log.error("PDF export failed for conversation id={} ({})", id,
+                    com.abhijeet.ai_knowledge_assistant.exception.GlobalExceptionHandler.describe(e));
             return ResponseEntity.internalServerError().build();
         }
     }

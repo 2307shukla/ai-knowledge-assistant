@@ -17,7 +17,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Token-bucket rate limiting for the endpoints that call the AI provider.
+ * Token-bucket rate limiting. Applies to the endpoints that call the AI provider or do heavy work
+ * (per user, or per IP when anonymous). Sign-in and registration have their own earlier filter,
+ * {@link AuthRateLimitFilter}, because Spring Security answers /login before this one runs.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
@@ -42,7 +44,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             evictIdleBuckets();
         }
 
-        Bucket bucket = buckets.computeIfAbsent(clientKey(request), key -> newBucket());
+        Bucket bucket = buckets.computeIfAbsent(clientKey(request), key -> newBucket(CAPACITY));
 
         if (bucket.tryConsume(1)) {
             chain.doFilter(request, response);
@@ -86,11 +88,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         buckets.values().removeIf(bucket -> bucket.getAvailableTokens() >= CAPACITY);
     }
 
-    private Bucket newBucket() {
+    private Bucket newBucket(int capacity) {
         return Bucket.builder()
                 .addLimit(Bandwidth.builder()
-                        .capacity(CAPACITY)
-                        .refillGreedy(CAPACITY, REFILL_PERIOD)
+                        .capacity(capacity)
+                        .refillGreedy(capacity, REFILL_PERIOD)
                         .build())
                 .build();
     }

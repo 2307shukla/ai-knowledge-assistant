@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The private document library: upload with limits, list, get, delete and re-index.
@@ -52,12 +54,17 @@ public class DocumentService {
     private final int maxPages;
     private final int maxDocuments;
     private final int maxChunks;
+    /** Only a few PDFs are parsed at once, so several big uploads cannot exhaust a 512 MB instance. */
+    private final Semaphore parseSlots;
+    private final long parseWaitSeconds;
 
     public DocumentService(KnowledgeDocumentRepository documents, JdbcAggregateTemplate aggregates, RagService rag,
                            @Value("${app.documents.max-bytes:5242880}") long maxBytes,
                            @Value("${app.documents.max-pages:50}") int maxPages,
                            @Value("${app.documents.max-per-user:20}") int maxDocuments,
-                           @Value("${app.documents.max-chunks:400}") int maxChunks) {
+                           @Value("${app.documents.max-chunks:400}") int maxChunks,
+                           @Value("${app.documents.max-concurrent-parses:2}") int maxConcurrentParses,
+                           @Value("${app.documents.parse-wait-seconds:10}") long parseWaitSeconds) {
         this.documents = documents;
         this.aggregates = aggregates;
         this.rag = rag;
@@ -65,6 +72,8 @@ public class DocumentService {
         this.maxPages = maxPages;
         this.maxDocuments = maxDocuments;
         this.maxChunks = maxChunks;
+        this.parseSlots = new Semaphore(Math.max(1, maxConcurrentParses), true);
+        this.parseWaitSeconds = parseWaitSeconds;
     }
 
     /** Validates, extracts page by page, chunks, embeds and records an upload for this owner. */
@@ -92,7 +101,7 @@ public class DocumentService {
                     "You already have " + maxDocuments + " documents, the limit. Delete one to upload another.");
         }
 
-        Extracted extracted = extractPdf(bytes, maxPages);
+        Extracted extracted = extractWithSlot(bytes);
         List<TextChunker.Chunk> chunks = TextChunker.chunk(extracted.pages());
         if (chunks.isEmpty()) {
             throw new UploadRejectedException(HttpStatus.UNPROCESSABLE_ENTITY,
@@ -129,6 +138,34 @@ public class DocumentService {
     public List<KnowledgeDocument> list(String owner) {
         requireOwner(owner);
         return documents.findByOwnerInOrderByCreatedAtDesc(List.of(owner, KnowledgeDocument.PUBLIC));
+    }
+
+    /** Most documents one question may be limited to. */
+    public static final int MAX_SCOPE = 20;
+
+    /**
+     * Checks that the caller may read every id (their own or the public sample) and returns them.
+     * One unreadable id fails the whole request with 404, exactly like a missing document, so the
+     * answer never reveals whether another user's document exists.
+     */
+    public java.util.Set<String> requireReadable(String owner, java.util.Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return java.util.Set.of();
+        }
+        if (ids.size() > MAX_SCOPE) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Choose at most " + MAX_SCOPE + " documents.");
+        }
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (String id : ids) {
+            if (id == null || get(owner, id).isEmpty()) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Document not found.");
+            }
+            out.add(id);
+        }
+        return out;
     }
 
     /** One document the caller may read: their own or the public sample. Anything else: empty. */
@@ -193,6 +230,33 @@ public class DocumentService {
 
     // ------------------------------------------------------------------ helpers
 
+    /** Waits briefly for a free parse slot; when none frees up the user is told to retry. */
+    Extracted extractWithSlot(byte[] bytes) {
+        boolean acquired;
+        try {
+            acquired = parseSlots.tryAcquire(parseWaitSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new UploadRejectedException(HttpStatus.SERVICE_UNAVAILABLE, BUSY_MESSAGE);
+        }
+        if (!acquired) {
+            throw new UploadRejectedException(HttpStatus.SERVICE_UNAVAILABLE, BUSY_MESSAGE);
+        }
+        try {
+            return extractPdf(bytes, maxPages);
+        } finally {
+            parseSlots.release();
+        }
+    }
+
+    private static final String BUSY_MESSAGE =
+            "The server is busy reading other documents. Please try again in a few seconds.";
+
+    /** The parse gate (for tests and diagnostics). */
+    Semaphore parseGate() {
+        return parseSlots;
+    }
+
     private Optional<KnowledgeDocument> owned(String owner, String id) {
         requireOwner(owner);
         if (KnowledgeDocument.PUBLIC.equals(owner)) {
@@ -212,7 +276,8 @@ public class DocumentService {
             rag.index(document);
         } catch (RuntimeException e) {
             // No owner or document text in the log: the id is enough to investigate.
-            log.error("Embedding failed for document id={}", document.getId(), e);
+            log.error("Embedding failed for document id={} ({})", document.getId(),
+                    com.abhijeet.ai_knowledge_assistant.exception.GlobalExceptionHandler.describe(e));
             List<String> partial = document.getChunks().stream()
                     .map(DocumentChunk::getVectorId).filter(Objects::nonNull).toList();
             try {

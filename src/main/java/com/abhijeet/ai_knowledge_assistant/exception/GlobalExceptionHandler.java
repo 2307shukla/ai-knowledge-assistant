@@ -99,7 +99,7 @@ public class GlobalExceptionHandler {
         HttpStatusCode code = ex.getStatusCode();
         String reason = ex.getReason();
         if (code.is5xxServerError()) {
-            log.error("Request failed with status {}", code.value(), ex);
+            log.error("Request failed with status {} ({})", code.value(), describe(ex));
             reason = ErrorMessages.GENERIC;
         }
         return respond(code, reason == null ? defaultMessage(code) : reason);
@@ -107,8 +107,24 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAny(Exception ex) {
-        log.error("Unhandled request failure", ex);
+        log.error("Unhandled request failure ({})", describe(ex));
         return respond(ErrorMessages.statusFor(ex), ErrorMessages.forUser(ex));
+    }
+
+    /**
+     * Where a failure happened, without its message: provider and driver messages can contain keys,
+     * file names or document text. The exception type and first application frame are enough to debug.
+     */
+    public static String describe(Throwable ex) {
+        String where = "unknown";
+        for (StackTraceElement frame : ex.getStackTrace()) {
+            if (frame.getClassName().startsWith("com.abhijeet")) {
+                where = frame.getClassName().substring(frame.getClassName().lastIndexOf('.') + 1)
+                        + "." + frame.getMethodName() + ":" + frame.getLineNumber();
+                break;
+            }
+        }
+        return ex.getClass().getSimpleName() + " at " + where;
     }
 
     static ResponseEntity<Map<String, Object>> respond(HttpStatusCode status, String message) {

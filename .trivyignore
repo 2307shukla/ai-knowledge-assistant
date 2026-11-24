@@ -1,15 +1,5 @@
 # Accepted vulnerabilities. Every entry needs a reason and an expiry date (exp:); after that date
 # Trivy reports it again and CI fails until it is reviewed.
 #
-# Fixed only in Spring Framework 7 (Spring Boot 4). Spring Boot 3.5.16 ships the last free 6.2.x.
-# Agreed on 2026-11-25: stay on Spring Boot 3.5 for Phase 1, move to Spring Boot 4 in Phase 2.
-
-# spring-webmvc XsltView path issue. The app has no XsltView or XSLT views.
-CVE-2026-47884 exp:2027-01-31
-
-# spring-webmvc / spring-webflux. Fix only in Spring Framework 7.0.9.
-CVE-2026-47890 exp:2027-01-31
-
-# spring-webflux functional endpoints. The app serves no WebFlux endpoints
-# (WebFlux is only the HTTP client used by Spring AI).
-CVE-2026-47892 exp:2027-01-31
+# Currently empty: the three Spring Framework 6.2 issues that were listed here were fixed by the
+# move to Spring Boot 4 (Spring Framework 7).
