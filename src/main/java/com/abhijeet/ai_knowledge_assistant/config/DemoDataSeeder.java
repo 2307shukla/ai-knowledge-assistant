@@ -69,12 +69,12 @@ public class DemoDataSeeder implements ApplicationRunner {
                     a.setPassword(encoder.encode(UUID.randomUUID().toString()));
                     a.setRole("USER");
                     users.save(a);
-                    log.warn("Locked a leftover admin account that still used the retired published password");
+                    log.warn("Locked a leftover admin account that still used the retired default login");
                 });
                 return;
             }
             if (adminPassword.length() < MIN_ADMIN_PASSWORD_LENGTH) {
-                log.warn("APP_ADMIN_PASSWORD is shorter than {} characters; no admin account was created",
+                log.warn("The configured admin credential is shorter than {} characters; no admin account was created",
                         MIN_ADMIN_PASSWORD_LENGTH);
                 return;
             }
@@ -82,7 +82,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 User admin = new User("admin", encoder.encode(adminPassword), "Administrator");
                 admin.setRole("ADMIN");
                 users.save(admin);
-                log.info("Created the admin account from APP_ADMIN_PASSWORD");
+                log.info("Created the admin account from configuration");
             }
         } catch (Exception e) {
             log.warn("Could not set up the admin account: {}", e.getClass().getSimpleName());
