@@ -13,7 +13,6 @@ A production-shaped AI chat application built with **Java 21**, **Spring Boot 3*
 | Account | Username | Password | Role |
 |---|---|---|---|
 | Demo user | `demo` | `demo123` | USER |
-| Administrator | `admin` | `admin123` | ADMIN |
 
 > Free tier sleeps after ~15 minutes. The first request can take up to a minute to wake.
 
@@ -139,6 +138,7 @@ All optional. The app starts with none of them.
 | `AI_API_KEY` | unset | Shared Gemini key. Without it, users add their own key in the app. |
 | `DATABASE_URL` | built-in HSQLDB (in memory) | PostgreSQL with pgvector, pasted as the provider shows it. Enables persistence. |
 | `APP_ENCRYPTION_KEY` | random per start | Base64 of 32 bytes; encrypts saved user keys. Set it, or saved keys are lost on restart. |
+| `APP_ADMIN_PASSWORD` | none (no admin exists) | At least 12 characters. Creates the `admin` account for the analytics page. Never commit it. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | unset | Google sign-in. Without them only password login and guest mode appear. |
 | `DOCUMENTS_MAX_BYTES` | `5242880` (5 MB) | Largest PDF accepted. |
 | `DOCUMENTS_MAX_PAGES` | `50` | Most pages per PDF. |
