@@ -88,9 +88,14 @@ public class FakeAiConfig {
 
     public static final class RecordingChatModel implements ChatModel {
         public final List<String> prompts = new CopyOnWriteArrayList<>();
+        /** When set, every call fails with this exception (to test error handling). */
+        public volatile RuntimeException failWith;
 
         @Override
         public ChatResponse call(Prompt prompt) {
+            if (failWith != null) {
+                throw failWith;
+            }
             prompts.add(prompt.getContents());
             return new ChatResponse(List.of(new Generation(new AssistantMessage("Answer [1]"))));
         }

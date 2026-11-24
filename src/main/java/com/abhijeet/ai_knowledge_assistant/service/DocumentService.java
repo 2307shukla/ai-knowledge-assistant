@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The private document library: upload with limits, list, get, delete and re-index.
@@ -52,12 +54,17 @@ public class DocumentService {
     private final int maxPages;
     private final int maxDocuments;
     private final int maxChunks;
+    /** Only a few PDFs are parsed at once, so several big uploads cannot exhaust a 512 MB instance. */
+    private final Semaphore parseSlots;
+    private final long parseWaitSeconds;
 
     public DocumentService(KnowledgeDocumentRepository documents, JdbcAggregateTemplate aggregates, RagService rag,
                            @Value("${app.documents.max-bytes:5242880}") long maxBytes,
                            @Value("${app.documents.max-pages:50}") int maxPages,
                            @Value("${app.documents.max-per-user:20}") int maxDocuments,
-                           @Value("${app.documents.max-chunks:400}") int maxChunks) {
+                           @Value("${app.documents.max-chunks:400}") int maxChunks,
+                           @Value("${app.documents.max-concurrent-parses:2}") int maxConcurrentParses,
+                           @Value("${app.documents.parse-wait-seconds:10}") long parseWaitSeconds) {
         this.documents = documents;
         this.aggregates = aggregates;
         this.rag = rag;
@@ -65,6 +72,8 @@ public class DocumentService {
         this.maxPages = maxPages;
         this.maxDocuments = maxDocuments;
         this.maxChunks = maxChunks;
+        this.parseSlots = new Semaphore(Math.max(1, maxConcurrentParses), true);
+        this.parseWaitSeconds = parseWaitSeconds;
     }
 
     /** Validates, extracts page by page, chunks, embeds and records an upload for this owner. */
@@ -92,7 +101,7 @@ public class DocumentService {
                     "You already have " + maxDocuments + " documents, the limit. Delete one to upload another.");
         }
 
-        Extracted extracted = extractPdf(bytes, maxPages);
+        Extracted extracted = extractWithSlot(bytes);
         List<TextChunker.Chunk> chunks = TextChunker.chunk(extracted.pages());
         if (chunks.isEmpty()) {
             throw new UploadRejectedException(HttpStatus.UNPROCESSABLE_ENTITY,
@@ -192,6 +201,33 @@ public class DocumentService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** Waits briefly for a free parse slot; when none frees up the user is told to retry. */
+    Extracted extractWithSlot(byte[] bytes) {
+        boolean acquired;
+        try {
+            acquired = parseSlots.tryAcquire(parseWaitSeconds, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new UploadRejectedException(HttpStatus.SERVICE_UNAVAILABLE, BUSY_MESSAGE);
+        }
+        if (!acquired) {
+            throw new UploadRejectedException(HttpStatus.SERVICE_UNAVAILABLE, BUSY_MESSAGE);
+        }
+        try {
+            return extractPdf(bytes, maxPages);
+        } finally {
+            parseSlots.release();
+        }
+    }
+
+    private static final String BUSY_MESSAGE =
+            "The server is busy reading other documents. Please try again in a few seconds.";
+
+    /** The parse gate (for tests and diagnostics). */
+    Semaphore parseGate() {
+        return parseSlots;
+    }
 
     private Optional<KnowledgeDocument> owned(String owner, String id) {
         requireOwner(owner);

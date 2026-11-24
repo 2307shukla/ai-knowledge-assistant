@@ -32,6 +32,12 @@ jobs:
       - name: Build, test and lint
         run: ./mvnw -B --no-transfer-progress verify
 
+      # Fails the build if a key, token or password pattern is committed (gitleaks, MIT, runs offline).
+      - name: Secret scan (gitleaks)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest detect --no-git --source /repo \
+            --redact --no-banner --exit-code 1
+
       - name: Banned dependencies (copyleft or replaced libraries)
         run: |
           ./mvnw -B -q --no-transfer-progress dependency:tree -DoutputFile=target/deps.txt

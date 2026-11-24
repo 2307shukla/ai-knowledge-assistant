@@ -386,7 +386,10 @@ To capture: open the live URL, press **Win + G** (Windows Game Bar) to record a 
 
 - Authentication and authorisation on every endpoint; documents and conversations are always loaded with the caller as owner.
 - SQL only through Spring Data derived queries or bound parameters; no string-built SQL with user input.
-- Input limits: question length, message length, upload size, pages, document count, rate limit (20 requests/minute per user or IP covers chat, ask, upload and re-index).
+- CSRF: browser requests that change state must come from this site (`Origin` and `Sec-Fetch-Site` are checked, in addition to the `SameSite=Lax` cookie).
+- Secrets: CI runs gitleaks and fails on a committed key or token.
+- Concurrency: at most 2 PDFs are parsed at once (`DOCUMENTS_MAX_CONCURRENT_PARSES`); others wait briefly, then get a 503 with a retry message.
+- Input limits: question length, message length, upload size, pages, document count, rate limit (20 requests/minute per user or IP covers chat, ask, upload and re-index; sign-in and registration allow 10 per minute per IP).
 - File names are reduced to a display name (no paths, control or markup characters) and are never used as file paths.
 - Errors return a short message and a request id. Stack traces, exception names, SQL and provider responses stay in the server log.
 - Logs are JSON with the request id. They contain ids and counts only: no document text, prompts, API keys, e-mail addresses or usernames.
@@ -400,6 +403,20 @@ To delete legacy ownerless embeddings after checking the count (PostgreSQL):
 SELECT COUNT(*) FROM vector_store WHERE metadata->>'owner' IS NULL;  -- check first
 DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if you are sure
 ```
+
+---
+
+## Data retention
+
+| Data | Where | Kept until |
+|---|---|---|
+| Account, chats, memories | Database (PostgreSQL if `DATABASE_URL` is set, otherwise in memory) | You delete them, or the in-memory database restarts |
+| Your PDFs | **Not stored.** Text is extracted, then the file is discarded | n/a |
+| Document passages and their embeddings | Database / `vector_store` | You delete the document (rows and vectors are removed together) |
+| Logs | Render's log stream | Render's log retention; ids and counts only |
+
+On Render's free tier the service sleeps after about 15 minutes idle and its disk is ephemeral, so
+use `DATABASE_URL` for anything you want to keep.
 
 ---
 

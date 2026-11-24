@@ -14,6 +14,7 @@ import com.abhijeet.ai_knowledge_assistant.service.ChatService;
 import com.abhijeet.ai_knowledge_assistant.util.InputSanitizer;
 import tools.jackson.databind.json.JsonMapper;
 import org.springframework.core.task.TaskExecutor;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -200,7 +201,12 @@ public class ConversationController {
         SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
 
         final boolean useDocuments = request.documents();
+        // The stream runs on another thread: carry the request id over so its log lines are traceable.
+        final Map<String, String> logContext = MDC.getCopyOfContextMap();
         taskExecutor.execute(() -> {
+            if (logContext != null) {
+                MDC.setContextMap(logContext);
+            }
             try {
                 List<SourceHit> sources = chatService.sourcesFor(user, text, useDocuments);
                 if (useDocuments) {
@@ -226,6 +232,8 @@ public class ConversationController {
                     // client disconnected - nothing useful left to do
                 }
                 emitter.complete();
+            } finally {
+                MDC.clear();
             }
         });
 
