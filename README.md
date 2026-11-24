@@ -97,7 +97,7 @@ flowchart LR
 | **Voice** | Web Speech API for input and text-to-speech output |
 | **Export** | Conversation to CSV (formula-safe) or PDF (Apache PDFBox) |
 | **Health check** | `/actuator/health/liveness` — no database work, for Render's probe |
-| **API documentation** | Swagger UI at `/swagger-ui.html` |
+| **API documentation** | Swagger UI at `/swagger-ui.html`, off by default; set `SWAGGER_ENABLED=true` to turn it on |
 | **CI** | GitHub Actions: build, tests, PMD lint, banned-dependency and licence gates, Trivy scan, zero-config container start |
 
 ---
@@ -202,7 +202,7 @@ Design notes worth knowing:
 
 ## API
 
-Interactive docs: **https://ai-knowledge-assistant-378a.onrender.com/swagger-ui.html**
+Interactive docs (only when `SWAGGER_ENABLED=true`): `/swagger-ui.html`
 
 | Method | Endpoint | Description |
 |---|---|---|
