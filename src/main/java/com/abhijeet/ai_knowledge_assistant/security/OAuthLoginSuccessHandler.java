@@ -57,9 +57,9 @@ public class OAuthLoginSuccessHandler extends SimpleUrlAuthenticationSuccessHand
                             encoder.encode(UUID.randomUUID().toString()),
                             name == null || name.isBlank() ? email : name);
                     users.save(user);
-                    log.info("Created account for Google sign-in: {}", email);
+                    log.info("Created account for a Google sign-in");
                 } catch (Exception e) {
-                    log.warn("Could not create account for {}: {}", email, e.getMessage());
+                    log.warn("Could not create an account for a Google sign-in: {}", e.getClass().getSimpleName());
                 }
             }
         }

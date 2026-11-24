@@ -1,44 +1,33 @@
 package com.abhijeet.ai_knowledge_assistant.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
+
 
 import java.time.Instant;
 
-@Entity
-@Table(name = "chat_message")
+@Table("chat_message")
 public class ChatMessage {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "conversation_id")
-    private Conversation conversation;
+    @Column("conversation_id")
+    private Long conversationId;
 
     /** "user" or "assistant". */
-    @Column(nullable = false, length = 16)
     private String role;
 
-    @Column(nullable = false, length = 8000)
     private String content;
 
-    @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
     public ChatMessage() {
     }
 
     public ChatMessage(Conversation conversation, String role, String content) {
-        this.conversation = conversation;
+        this.conversationId = conversation.getId();
         this.role = role;
         this.content = content;
     }
@@ -47,8 +36,8 @@ public class ChatMessage {
         return id;
     }
 
-    public Conversation getConversation() {
-        return conversation;
+    public Long getConversationId() {
+        return conversationId;
     }
 
     public String getRole() {

@@ -39,7 +39,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 users.save(admin);
                 log.info("Seeded admin account (admin / admin123)");
             } catch (Exception e) {
-                log.warn("Could not seed admin account: {}", e.getMessage());
+                log.warn("Could not seed admin account: {}", e.getClass().getSimpleName());
             }
         }
 
@@ -52,7 +52,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                     "This is the shared demo account. The visitor is evaluating the app."));
             log.info("Seeded demo account (demo / demo123)");
         } catch (Exception e) {
-            log.warn("Could not seed demo account: {}", e.getMessage());
+            log.warn("Could not seed demo account: {}", e.getClass().getSimpleName());
         }
     }
 }

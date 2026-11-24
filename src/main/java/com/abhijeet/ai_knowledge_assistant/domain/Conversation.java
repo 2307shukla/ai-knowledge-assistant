@@ -1,51 +1,41 @@
 package com.abhijeet.ai_knowledge_assistant.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
+
 
 import java.time.Instant;
 
-@Entity
-@Table(name = "conversation")
+@Table("conversation")
 public class Conversation {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id")
-    private User user;
+    /** Owner. A plain id: Spring Data JDBC keeps aggregates separate. */
+    @Column("user_id")
+    private Long userId;
 
-    @Column(nullable = false, length = 120)
     private String title = "New chat";
 
-    @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
-    @Column(nullable = false)
     private Instant updatedAt = Instant.now();
 
     public Conversation() {
     }
 
     public Conversation(User user) {
-        this.user = user;
+        this.userId = user.getId();
     }
 
     public Long getId() {
         return id;
     }
 
-    public User getUser() {
-        return user;
+    public Long getUserId() {
+        return userId;
     }
 
     public String getTitle() {

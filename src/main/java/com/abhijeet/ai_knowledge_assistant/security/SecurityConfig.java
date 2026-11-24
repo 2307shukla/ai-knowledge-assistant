@@ -11,6 +11,8 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.AnyRequestMatcher;
 
@@ -23,6 +25,13 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    static final String CONTENT_SECURITY_POLICY = "default-src 'self'; "
+            + "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            + "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            + "img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; "
+            + "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
+            + "form-action 'self' https://accounts.google.com";
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            ClientRegistrationRepository registrations,
@@ -34,7 +43,7 @@ public class SecurityConfig {
                                 "/", "/index.html", "/login.html", "/register.html",
                                 "/api/auth/**", "/api/guest/**",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**",
-                                "/actuator/health", "/actuator/info",
+                                "/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness", "/actuator/info",
                                 "/css/**", "/js/**", "/favicon.ico", "/error")
                         .permitAll()
                         .requestMatchers("/admin.html", "/api/admin/**").hasRole("ADMIN")
@@ -57,6 +66,14 @@ public class SecurityConfig {
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login.html"),
                                 AnyRequestMatcher.INSTANCE))
+                // Browser hardening. Inline scripts are still used by the pages, hence 'unsafe-inline';
+                // scripts may only come from this site and the jsDelivr CDN. No other site may frame us.
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY))
+                        .referrerPolicy(ref -> ref.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                        .frameOptions(frame -> frame.deny())
+                        .addHeaderWriter(new StaticHeadersWriter("Permissions-Policy",
+                                "camera=(), geolocation=(), microphone=(self)")))
                 // JSON fetch calls from a single page; CSRF disabled for this demo.
                 .csrf(csrf -> csrf.disable());
 

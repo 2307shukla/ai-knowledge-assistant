@@ -43,6 +43,15 @@
   .del:hover { color: #f87171; }
   .empty { padding: 8px 18px; font-size: 12.5px; color: #5f6b7d; }
 
+  #documents { overflow-y: auto; max-height: 22vh; padding: 0 8px; }
+  .doc { display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px; color: #c8cfdb; border-radius: 8px; }
+  .doc:hover { background: #1b212b; }
+  .doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-meta { color: #5f6b7d; font-size: 11px; white-space: nowrap; }
+  .usedocs { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; user-select: none; }
+  .sources { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .source { font-size: 11.5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+
   #memories { overflow-y: auto; max-height: 24vh; padding: 0 12px; }
   .mem {
     display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px;
@@ -205,6 +214,9 @@
   <div class="section">Chats</div>
   <div id="conversations"></div>
 
+  <div class="section">Documents</div>
+  <div id="documents"><div class="empty">Loading…</div></div>
+
   <div class="section">Memory</div>
   <div id="memories"></div>
   <div class="memadd">
@@ -237,13 +249,14 @@
   </div>
   <div id="messages"><div class="welcome">Loading…</div></div>
   <form class="composer" id="composer">
-    <input type="file" id="fileInput" accept=".pdf,.txt" hidden>
-    <button type="button" class="tool" id="attachBtn" title="Add a PDF or text file" aria-label="Attach a document">
+    <input type="file" id="fileInput" accept=".pdf,application/pdf" hidden>
+    <button type="button" class="tool" id="attachBtn" title="Add a PDF to your private library" aria-label="Attach a document">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
     </button>
     <button type="button" class="tool" id="micBtn" title="Speak your message" aria-label="Voice input">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
     </button>
+    <label class="usedocs" title="Answer from your documents and cite the pages"><input type="checkbox" id="useDocs"> Use my documents</label>
     <textarea id="input" rows="1" placeholder="Message the assistant…"></textarea>
     <button class="send" id="send" type="submit">Send</button>
   </form>
@@ -366,17 +379,34 @@
     box.scrollTop = box.scrollHeight;
   }
 
+  let lastSources = [];
+
+  // Source chips under an answer: file and page, with the passage as a tooltip.
+  function renderSources(bubble, sources) {
+    if (!sources || !sources.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'sources';
+    for (const s of sources) {
+      const chip = document.createElement('span');
+      chip.className = 'source';
+      chip.textContent = '[' + s.index + '] ' + s.file + (s.page ? ', p. ' + s.page : '');
+      chip.title = s.snippet || '';
+      wrap.appendChild(chip);
+    }
+    bubble.appendChild(wrap);
+  }
+
   async function streamReply(conversationId, text, onPartial) {
     const res = await fetch('/api/conversations/' + conversationId + '/messages/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text })
+      body: JSON.stringify({ content: text, useDocuments: document.getElementById('useDocs').checked })
     });
 
     if (res.status === 401) { location.href = '/login.html'; throw new Error('Not signed in'); }
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error('HTTP ' + res.status + (body ? ': ' + body : ''));
+      const body = await res.json().catch(() => null);
+      throw new Error((body && body.error) || ('HTTP ' + res.status));
     }
 
     const reader = res.body.getReader();
@@ -406,6 +436,8 @@
         if (typeof parsed === 'string') {
           full += parsed;
           onPartial(full);
+        } else if (parsed && Array.isArray(parsed.sources)) {
+          lastSources = parsed.sources;
         } else if (parsed && parsed.error) {
           throw new Error(parsed.error);
         }
@@ -490,6 +522,7 @@
     send.disabled = true;
     const started = performance.now();
     let full = '';
+    lastSources = [];
 
     try {
       full = await streamReply(currentId, text, partial => {
@@ -498,6 +531,7 @@
         box.scrollTop = box.scrollHeight;
       });
       renderAssistant(bubble, full, (performance.now() - started) / 1000);
+      renderSources(bubble, lastSources);
       await refreshConversations();
     } catch (e) {
       renderAssistant(bubble, full || ('Error: ' + e.message), null);
@@ -624,20 +658,67 @@
       const res = await fetch('/api/rag/upload', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        appendMessage('assistant', 'Could not read that file. ' + (data.error || res.status));
+        appendMessage('assistant', 'Could not add that file. ' + (data.error || ('HTTP ' + res.status)));
       } else {
         const preview = (data.preview || '').split('\n').map(line => '> ' + line).join('\n');
         appendMessage('assistant',
-          'Indexed **' + data.file + '**\n\n'
-          + '- chunks: ' + data.chunks + '\n'
-          + '- characters: ' + data.characters + '\n\n'
+          'Added **' + data.file + '** to your private library\n\n'
+          + '- pages: ' + data.pages + '\n'
+          + '- passages: ' + data.chunks + '\n\n'
+          + '"Use my documents" is now on, so answers cite this file.\n\n'
           + 'Extracted text (start):\n\n' + preview);
+        document.getElementById('useDocs').checked = true;
+        await loadDocuments();
       }
     } catch (e) {
       appendMessage('assistant', 'Upload failed: ' + e.message);
     } finally {
       attachBtn.disabled = false;
       fileInput.value = '';
+    }
+  });
+
+  // ---------------- document library ----------------
+  async function loadDocuments() {
+    const el = document.getElementById('documents');
+    try {
+      const data = await api('/api/rag/documents');
+      const docs = data.documents || [];
+      if (!docs.length) {
+        el.innerHTML = '<div class="empty">No documents yet. Use the paperclip to add a PDF.</div>';
+        return;
+      }
+      el.innerHTML = docs.map(d => `
+        <div class="doc" title="${esc(d.file)}">
+          <span class="doc-name">${esc(d.file)}</span>
+          <span class="doc-meta">${d.shared ? 'sample' : (d.pages ? d.pages + ' p' : '')}</span>
+          ${d.canDelete ? `<button class="del" data-reindex="${esc(d.id)}" title="Re-index">&#8635;</button>
+          <button class="del" data-deldoc="${esc(d.id)}" title="Delete">&times;</button>` : ''}
+        </div>`).join('');
+    } catch (e) {
+      el.innerHTML = '<div class="empty">Could not load documents.</div>';
+    }
+  }
+
+  document.getElementById('documents').addEventListener('click', async ev => {
+    const del = ev.target.closest('[data-deldoc]');
+    const re = ev.target.closest('[data-reindex]');
+    try {
+      if (del) {
+        if (!confirm('Delete this document? Its passages are removed from search.')) return;
+        await fetch('/api/rag/documents/' + encodeURIComponent(del.dataset.deldoc), { method: 'DELETE' });
+      } else if (re) {
+        re.disabled = true;
+        const res = await fetch('/api/rag/documents/' + encodeURIComponent(re.dataset.reindex) + '/reindex', { method: 'POST' });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          alert(body.error || ('HTTP ' + res.status));
+        }
+      } else {
+        return;
+      }
+    } finally {
+      await loadDocuments();
     }
   });
 
@@ -706,6 +787,7 @@
       const me = await api('/api/auth/me');
       document.getElementById('who').textContent = me.displayName || me.username;
       await loadMemories();
+      await loadDocuments();
       await loadKey();
       const list = await refreshConversations();
       if (list.length) {

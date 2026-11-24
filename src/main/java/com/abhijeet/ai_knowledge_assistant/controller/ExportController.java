@@ -6,11 +6,9 @@ import com.abhijeet.ai_knowledge_assistant.domain.User;
 import com.abhijeet.ai_knowledge_assistant.repository.ChatMessageRepository;
 import com.abhijeet.ai_knowledge_assistant.repository.ConversationRepository;
 import com.abhijeet.ai_knowledge_assistant.repository.UserRepository;
-import com.lowagie.text.Document;
-import com.lowagie.text.Font;
-import com.lowagie.text.FontFactory;
-import com.lowagie.text.Paragraph;
-import com.lowagie.text.pdf.PdfWriter;
+import com.abhijeet.ai_knowledge_assistant.export.SimplePdf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,7 +18,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -30,6 +29,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/conversations")
 public class ExportController {
+
+    private static final Logger log = LoggerFactory.getLogger(ExportController.class);
 
     private static final DateTimeFormatter STAMP =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC);
@@ -62,7 +63,7 @@ public class ExportController {
         for (ChatMessage message : messages.findByConversationOrderByIdAsc(conversation)) {
             sb.append(message.getRole()).append(',')
                     .append(STAMP.format(message.getCreatedAt())).append(',')
-                    .append('"').append(message.getContent().replace("\"", "\"\"")).append('"')
+                    .append('"').append(csvSafe(message.getContent()).replace("\"", "\"\"")).append('"')
                     .append('\n');
         }
 
@@ -82,39 +83,31 @@ public class ExportController {
 
         List<ChatMessage> history = messages.findByConversationOrderByIdAsc(conversation);
 
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Document document = new Document();
-            PdfWriter.getInstance(document, out);
-            document.open();
-
-            Font title = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16);
-            Font meta = FontFactory.getFont(FontFactory.HELVETICA, 9);
-            Font body = FontFactory.getFont(FontFactory.HELVETICA, 11);
-
-            document.add(new Paragraph(conversation.getTitle(), title));
-            document.add(new Paragraph(
-                    "Exported " + STAMP.format(java.time.Instant.now()) + " · "
-                            + history.size() + " messages", meta));
-            document.add(new Paragraph(" "));
-
+        try (SimplePdf pdf = new SimplePdf()) {
+            pdf.paragraph(conversation.getTitle(), SimplePdf.Style.TITLE)
+                    .paragraph("Exported " + STAMP.format(Instant.now()) + " \u00b7 " + history.size() + " messages",
+                            SimplePdf.Style.META);
             for (ChatMessage message : history) {
-                document.add(new Paragraph(
-                        message.getRole().toUpperCase() + " · "
-                                + STAMP.format(message.getCreatedAt()), meta));
-                document.add(new Paragraph(message.getContent(), body));
-                document.add(new Paragraph(" "));
+                pdf.paragraph(message.getRole().toUpperCase(java.util.Locale.ROOT) + " \u00b7 "
+                        + STAMP.format(message.getCreatedAt()), SimplePdf.Style.META)
+                        .paragraph(message.getContent(), SimplePdf.Style.BODY);
             }
-
-            document.close();
-
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
                             "attachment; filename=\"conversation-" + id + ".pdf\"")
                     .contentType(MediaType.APPLICATION_PDF)
-                    .body(out.toByteArray());
-
-        } catch (Exception e) {
+                    .body(pdf.toBytes());
+        } catch (IOException e) {
+            log.error("PDF export failed for conversation id={}", id, e);
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    /** Stops spreadsheet apps from running a cell as a formula (CSV injection). */
+    static String csvSafe(String value) {
+        if (value != null && !value.isEmpty() && "=+-@\t\r".indexOf(value.charAt(0)) >= 0) {
+            return "'" + value;
+        }
+        return value == null ? "" : value;
     }
 }

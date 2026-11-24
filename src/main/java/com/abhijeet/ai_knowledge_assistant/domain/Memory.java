@@ -1,14 +1,9 @@
 package com.abhijeet.ai_knowledge_assistant.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
+
 
 import java.time.Instant;
 
@@ -18,29 +13,25 @@ import java.time.Instant;
  * the user adds and removes entries themselves, so nothing is inferred
  * silently and no extra model call is needed to maintain it.
  */
-@Entity
-@Table(name = "memory")
+@Table("memory")
 public class Memory {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id")
-    private User user;
+    /** Owner. A plain id: Spring Data JDBC keeps aggregates separate. */
+    @Column("user_id")
+    private Long userId;
 
-    @Column(nullable = false, length = 500)
     private String content;
 
-    @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
     public Memory() {
     }
 
     public Memory(User user, String content) {
-        this.user = user;
+        this.userId = user.getId();
         this.content = content;
     }
 
@@ -48,8 +39,8 @@ public class Memory {
         return id;
     }
 
-    public User getUser() {
-        return user;
+    public Long getUserId() {
+        return userId;
     }
 
     public String getContent() {

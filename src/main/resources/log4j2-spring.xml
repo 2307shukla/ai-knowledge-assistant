@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Structured JSON logs (Elastic Common Schema), one object per line. Every line carries the request
+  id from the MDC (labels.requestId). Newlines in messages are escaped, so a value cannot forge a
+  log line. Run with the "dev" Spring profile for plain readable lines locally.
+  Rule for code: log ids and counts only - never document text, prompts, API keys or e-mail addresses.
+-->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Json" target="SYSTEM_OUT">
+            <JsonTemplateLayout eventTemplateUri="classpath:EcsLayout.json"/>
+        </Console>
+        <Console name="Plain" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level [%X{requestId}] %logger{1} - %enc{%m}{CRLF}%n%throwable"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="org.apache.pdfbox" level="ERROR"/>
+        <Logger name="org.apache.fontbox" level="ERROR"/>
+        <SpringProfile name="dev">
+            <Root level="INFO">
+                <AppenderRef ref="Plain"/>
+            </Root>
+        </SpringProfile>
+        <SpringProfile name="!dev">
+            <Root level="INFO">
+                <AppenderRef ref="Json"/>
+            </Root>
+        </SpringProfile>
+    </Loggers>
+</Configuration>

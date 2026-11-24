@@ -41,13 +41,13 @@ public class ByokService {
     public void save(User user, String apiKey) {
         user.setApiKeyEncrypted(cipher.encrypt(apiKey.trim()));
         users.save(user);
-        log.info("Stored BYOK for user {}", user.getUsername());
+        log.info("Stored BYOK for user id={}", user.getId());
     }
 
     public void clear(User user) {
         user.setApiKeyEncrypted(null);
         users.save(user);
-        log.info("Cleared BYOK for user {}", user.getUsername());
+        log.info("Cleared BYOK for user id={}", user.getId());
     }
 
     /** Masked hint such as ****a1b2, or null when no key is stored. */
@@ -91,7 +91,7 @@ public class ByokService {
                     .build();
         } catch (Exception e) {
             // Deliberately does not include the key in the message.
-            log.warn("Could not use stored BYOK for user {}: {}", user.getUsername(), e.getMessage());
+            log.warn("Could not use stored BYOK for user id={}: {}", user.getId(), e.getClass().getSimpleName());
             return null;
         }
     }

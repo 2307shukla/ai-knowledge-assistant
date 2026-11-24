@@ -7,3 +7,6 @@ data/
 *.iml
 .vscode/
 .DS_Store
+
+# Local secrets
+.env

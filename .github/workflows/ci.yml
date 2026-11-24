@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build and test
+    name: Build, lint and test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,11 +28,32 @@ jobs:
       - name: Make wrapper executable
         run: chmod +x mvnw
 
-      - name: Build and run tests
+      # Compiles, runs every test, then PMD (lint) at the verify phase. No test is skipped.
+      - name: Build, test and lint
         run: ./mvnw -B --no-transfer-progress verify
 
+      - name: Banned dependencies (copyleft or replaced libraries)
+        run: |
+          ./mvnw -B -q --no-transfer-progress dependency:tree -DoutputFile=target/deps.txt
+          if grep -E "ch\.qos\.logback|org\.hibernate|com\.h2database|com\.github\.librepdf|org\.aspectj" target/deps.txt; then
+            echo "::error::A banned dependency is back on the classpath (see lines above)."
+            exit 1
+          fi
+          echo "No banned dependencies."
+
+      - name: SBOM and licence gate
+        run: |
+          ./mvnw -B -q --no-transfer-progress org.cyclonedx:cyclonedx-maven-plugin:makeBom
+          python3 scripts/licence_gate.py target/sbom.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: target/sbom.json
+
   docker:
-    name: Build Docker image
+    name: Docker image, out-of-the-box start and security scan
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -42,12 +63,15 @@ jobs:
       - name: Build image
         run: docker build -t ai-knowledge-assistant:ci .
 
-      - name: Verify image starts
+      # No environment variables at all: the app must start with zero setup.
+      - name: Verify image starts with no configuration
         run: |
-          docker run -d --name smoke -e AI_API_KEY=unset -p 8080:8080 ai-knowledge-assistant:ci
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/login.html > /dev/null; then
-              echo "Application responded"
+          docker run -d --name smoke -p 8080:8080 ai-knowledge-assistant:ci
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:8080/actuator/health/liveness > /dev/null; then
+              echo "Liveness probe answered"
+              curl -sf http://localhost:8080/login.html > /dev/null
+              docker logs smoke 2>&1 | head -c 20000 | grep -qiE "api[_-]?key=|password=" && { echo "::error::secret-like text in logs"; exit 1; }
               exit 0
             fi
             sleep 2
@@ -55,3 +79,15 @@ jobs:
           echo "Application did not start in time"
           docker logs smoke
           exit 1
+
+      - name: Validate docker compose file
+        run: docker compose config -q && docker compose --profile postgres config -q
+
+      # Free, no key needed. Fails on fixable HIGH or CRITICAL vulnerabilities in application libraries.
+      # Free, no key needed (Trivy, Apache-2.0, run from its official image). Fails on fixable HIGH or
+      # CRITICAL vulnerabilities in the application's libraries.
+      - name: Security scan (Trivy)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/.trivyignore:/ignore/.trivyignore:ro" \
+            aquasec/trivy:latest image --scanners vuln --pkg-types library --severity HIGH,CRITICAL \
+            --ignore-unfixed --ignorefile /ignore/.trivyignore --exit-code 1 --no-progress ai-knowledge-assistant:ci
