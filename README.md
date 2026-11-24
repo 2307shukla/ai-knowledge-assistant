@@ -405,7 +405,7 @@ DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if
 
 ## Licences
 
-Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate, H2, OpenPDF or AspectJ return, and a licence gate checks the CycloneDX SBOM (uploaded with each CI run) and fails on any licence that is not approved. LatencyUtils (CC0) is excluded from Micrometer for this reason. The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
+Runtime dependencies are MIT, Apache-2.0 or BSD only, plus the Jakarta APIs (EPL-2.0, approved exception). CI enforces this: the build fails if Logback, Hibernate ORM, H2, OpenPDF or AspectJ return (Hibernate Validator, Apache-2.0, is fine), and a licence gate checks the CycloneDX SBOM (uploaded with each CI run) and fails on any licence that is not approved. LatencyUtils (CC0) is excluded from Micrometer for this reason. The Docker image uses Eclipse Temurin (GPL-2.0 with the Classpath Exception, approved). Test-only: JUnit 5 (EPL-2.0, approved).
 
 ---
 
