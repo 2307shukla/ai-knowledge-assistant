@@ -1,5 +1,7 @@
 package com.abhijeet.ai_knowledge_assistant;
 
+import com.abhijeet.ai_knowledge_assistant.domain.User;
+import com.abhijeet.ai_knowledge_assistant.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +22,8 @@ class CrossSiteAndAuthLimitTest {
 
     @Autowired
     private MockMvc mvc;
+    @Autowired
+    private UserRepository users;
 
     @Test
     void stateChangeFromAnotherOriginIsRefused() throws Exception {
@@ -44,6 +48,7 @@ class CrossSiteAndAuthLimitTest {
 
     @Test
     void sameOriginAndNonBrowserRequestsPass() throws Exception {
+        users.save(new User("u2", "{noop}unused", "U Two"));
         mvc.perform(post("/api/conversations").with(user("u2").roles("USER")).header("Origin", "http://localhost"))
                 .andExpect(status().is2xxSuccessful());
         mvc.perform(post("/api/conversations").with(user("u2").roles("USER")).header("Sec-Fetch-Site", "same-origin"))

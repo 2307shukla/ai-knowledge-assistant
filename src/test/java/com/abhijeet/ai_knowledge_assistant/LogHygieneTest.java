@@ -148,6 +148,11 @@ class LogHygieneTest {
         @Override
         public void append(LogEvent event) {
             messages.add(event.getMessage().getFormattedMessage());
+            if (event.getThrown() != null) {
+                // Exception text and stack traces reach the real log output too.
+                messages.add(String.valueOf(event.getThrown().getMessage()));
+                messages.add(java.util.Arrays.toString(event.getThrown().getStackTrace()));
+            }
         }
     }
 }

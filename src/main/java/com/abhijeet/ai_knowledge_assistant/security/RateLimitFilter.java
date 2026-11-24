@@ -17,28 +17,25 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Token-bucket rate limiting. Two limits: the endpoints that call the AI provider or do heavy work
- * (per user, or per IP when anonymous), and sign-in / registration (per IP, stricter, to slow down
- * password guessing and account spam).
+ * Token-bucket rate limiting. Applies to the endpoints that call the AI provider or do heavy work
+ * (per user, or per IP when anonymous). Sign-in and registration have their own earlier filter,
+ * {@link AuthRateLimitFilter}, because Spring Security answers /login before this one runs.
  */
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private static final int CAPACITY = 20;
-    private static final int AUTH_CAPACITY = 10;
     private static final Duration REFILL_PERIOD = Duration.ofMinutes(1);
     private static final int MAX_TRACKED_CLIENTS = 10_000;
 
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> authBuckets = new ConcurrentHashMap<>();
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
 
-        boolean auth = isAuthAttempt(request);
-        if (!auth && !isLimited(request)) {
+        if (!isLimited(request)) {
             chain.doFilter(request, response);
             return;
         }
@@ -46,13 +43,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (buckets.size() > MAX_TRACKED_CLIENTS) {
             evictIdleBuckets();
         }
-        if (authBuckets.size() > MAX_TRACKED_CLIENTS) {
-            authBuckets.values().removeIf(bucket -> bucket.getAvailableTokens() >= AUTH_CAPACITY);
-        }
 
-        Bucket bucket = auth
-                ? authBuckets.computeIfAbsent("ip:" + request.getRemoteAddr(), key -> newBucket(AUTH_CAPACITY))
-                : buckets.computeIfAbsent(clientKey(request), key -> newBucket(CAPACITY));
+        Bucket bucket = buckets.computeIfAbsent(clientKey(request), key -> newBucket(CAPACITY));
 
         if (bucket.tryConsume(1)) {
             chain.doFilter(request, response);
@@ -63,13 +55,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.setContentType("application/json");
         response.getWriter().write(
                 "{\"error\":\"Too many requests. Please wait a minute and try again.\"}");
-    }
-
-    /** Password sign-in and registration: POST only, counted per client IP. */
-    private boolean isAuthAttempt(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return "POST".equals(request.getMethod())
-                && (path.equals("/login") || path.equals("/api/auth/register"));
     }
 
     private boolean isLimited(HttpServletRequest request) {
