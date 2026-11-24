@@ -28,6 +28,23 @@ jobs:
       - name: Make wrapper executable
         run: chmod +x mvnw
 
+      # The wrapper downloads Maven itself from Maven Central; that single download failed twice
+      # for reasons unrelated to the code. Cache it, and retry with a growing pause before building.
+      - name: Cache the Maven distribution
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/wrapper
+          key: maven-wrapper-${{ hashFiles('.mvn/wrapper/maven-wrapper.properties') }}
+
+      - name: Fetch Maven (with retries)
+        run: |
+          for attempt in 1 2 3 4 5; do
+            ./mvnw -B -v && exit 0
+            echo "Maven download failed (attempt $attempt), retrying"
+            sleep $((attempt * 15))
+          done
+          exit 1
+
       # Compiles, runs every test, then PMD (lint) at the verify phase. No test is skipped.
       - name: Build, test and lint
         run: ./mvnw -B --no-transfer-progress verify

@@ -57,7 +57,7 @@ class HttpEmbeddingModelTest {
     }
 
     private HttpEmbeddingModel model() {
-        return new HttpEmbeddingModel("http://127.0.0.1:" + server.getAddress().getPort() + "/v1/", "test-key", "m-1");
+        return new HttpEmbeddingModel("http://127.0.0.1:" + server.getAddress().getPort() + "/v1/", "test-key", "m-1", 2);
     }
 
     @Test
@@ -65,7 +65,7 @@ class HttpEmbeddingModelTest {
         EmbeddingResponse response = model().call(new EmbeddingRequest(List.of("alpha", "beta"), null));
         assertThat(response.getResults()).hasSize(2);
         assertThat(response.getResults().get(1).getOutput()).containsExactly(2.5f, 0.25f);
-        assertThat(bodies.get(0)).contains("\"model\":\"m-1\"").contains("alpha");
+        assertThat(bodies.get(0)).contains("\"model\":\"m-1\"").contains("alpha").contains("\"dimensions\":2");
         assertThat(auth.get(0)).isEqualTo("Bearer test-key");
     }
 
@@ -78,6 +78,15 @@ class HttpEmbeddingModelTest {
         EmbeddingResponse response = model().call(new EmbeddingRequest(texts, null));
         assertThat(response.getResults()).hasSize(230);
         assertThat(calls.get()).isEqualTo(3);
+    }
+
+    @Test
+    void aVectorOfTheWrongSizeIsRejectedWithAClearMessage() {
+        HttpEmbeddingModel wrong = new HttpEmbeddingModel(
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1/", "test-key", "m-1", 768);
+        assertThatThrownBy(() -> wrong.call(new EmbeddingRequest(List.of("x"), null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("2 values but 768 were expected");
     }
 
     @Test
