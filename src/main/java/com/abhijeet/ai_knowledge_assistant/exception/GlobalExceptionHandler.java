@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -49,6 +50,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<Map<String, Object>> badMultipart(MultipartException ex) {
         return respond(HttpStatus.BAD_REQUEST, "The upload could not be read. Send the file as multipart form data.");
+    }
+
+    /** Malformed requests stopped by Spring Security's firewall (for example a newline in a header). */
+    @ExceptionHandler(RequestRejectedException.class)
+    public ResponseEntity<Map<String, Object>> rejected(RequestRejectedException ex) {
+        log.warn("Request rejected by the firewall");
+        return respond(HttpStatus.BAD_REQUEST, "Bad request.");
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

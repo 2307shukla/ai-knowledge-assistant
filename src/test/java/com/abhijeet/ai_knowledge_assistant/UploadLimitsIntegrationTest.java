@@ -141,8 +141,15 @@ class UploadLimitsIntegrationTest {
     @Test
     void everyResponseCarriesARequestId() throws Exception {
         mvc.perform(get("/actuator/health/liveness")).andExpect(header().exists("X-Request-Id"));
-        mvc.perform(get("/actuator/health/liveness").header("X-Request-Id", "bad id\nforged-log-line"))
-                .andExpect(header().string("X-Request-Id", not(containsString("forged"))));
+        mvc.perform(get("/actuator/health/liveness").header("X-Request-Id", "bad id with spaces"))
+                .andExpect(header().string("X-Request-Id", not(containsString(" "))));
+    }
+
+    @Test
+    void forgedHeaderWithNewlineIsABadRequestNotAServerError() throws Exception {
+        // Reproduces the case seen in CI: the firewall rejects the header when the handler reads it.
+        expectError(mvc.perform(get("/actuator/health/liveness")
+                .header("X-Request-Id", "bad id\nforged-log-line")), 400);
     }
 
     // ------------------------------------------------------------------ helpers

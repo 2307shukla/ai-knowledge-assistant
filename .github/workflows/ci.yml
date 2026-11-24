@@ -84,12 +84,10 @@ jobs:
         run: docker compose config -q && docker compose --profile postgres config -q
 
       # Free, no key needed. Fails on fixable HIGH or CRITICAL vulnerabilities in application libraries.
+      # Free, no key needed (Trivy, Apache-2.0, run from its official image). Fails on fixable HIGH or
+      # CRITICAL vulnerabilities in the application's libraries.
       - name: Security scan (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ai-knowledge-assistant:ci
-          vuln-type: library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-          format: table
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest \
+            image --scanners vuln --pkg-types library --severity HIGH,CRITICAL \
+            --ignore-unfixed --exit-code 1 --no-progress ai-knowledge-assistant:ci
