@@ -124,7 +124,17 @@ public class GlobalExceptionHandler {
                 break;
             }
         }
-        return ex.getClass().getSimpleName() + " at " + where;
+        // The standard SQL error code (for example 22000 data exception, 23502 null value, 23505
+        // duplicate key) says what the database refused without echoing any row data.
+        String code = "";
+        int depth = 0;
+        for (Throwable t = ex; t != null && depth++ < 10; t = t.getCause()) {
+            if (t instanceof java.sql.SQLException sql && sql.getSQLState() != null) {
+                code = ", SQLState " + sql.getSQLState();
+                break;
+            }
+        }
+        return ex.getClass().getSimpleName() + " at " + where + code;
     }
 
     static ResponseEntity<Map<String, Object>> respond(HttpStatusCode status, String message) {
