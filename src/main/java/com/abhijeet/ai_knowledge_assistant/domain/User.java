@@ -1,43 +1,32 @@
 package com.abhijeet.ai_knowledge_assistant.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Table;
+
 
 import java.time.Instant;
 
-@Entity
-@Table(name = "app_user")
+@Table("app_user")
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 60)
     private String username;
 
-    @Column(nullable = false)
     private String password;
 
-    @Column(length = 80)
     private String displayName;
 
     /** USER or ADMIN. Enforced by Spring Security, not by the UI. */
-    @Column(nullable = false, length = 20)
     private String role = "USER";
 
     /**
      * User-supplied AI provider key (BYOK), AES-GCM encrypted. Never returned to
      * the client and never logged - only a masked hint is exposed.
      */
-    @Column(length = 1024)
     private String apiKeyEncrypted;
 
-    @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
     public User() {
