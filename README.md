@@ -406,6 +406,14 @@ DELETE FROM vector_store WHERE metadata->>'owner' IS NULL;           -- then, if
 
 ---
 
+## Working with several documents
+
+- **Limit a question to chosen documents:** tick one or more documents in the sidebar (none ticked = all). The API takes `documents=id1,id2` on `GET /api/rag/ask` and `documentIds` on the chat endpoints. Every id is checked against the caller; one id that is not theirs fails the whole request with 404, the same as a missing document.
+- **"Not found in your documents":** passages scoring below `APP_RAG_MIN_SCORE` (default `0.25`) are dropped. When nothing is left, the answer says so and **the model is not called**, so it cannot guess. Raise the value to be stricter, lower it if good questions get refused.
+- **Summary and starter questions:** after an upload, `GET /api/rag/documents/{id}/summary` returns a three-sentence summary and three questions (one model call, then cached until the document is deleted or the service restarts).
+- **Export:** `GET /api/conversations/{id}/export.md` downloads a chat as Markdown (CSV and PDF already existed). Only the chat's owner can export it.
+- **Upload experience:** drag and drop anywhere, browser-side type and size checks, a documents-used meter, status badges, and errors that show a short reference (the request id) you can quote.
+
 ## Data retention
 
 | Data | Where | Kept until |

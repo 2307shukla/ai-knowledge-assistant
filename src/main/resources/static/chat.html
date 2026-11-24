@@ -48,6 +48,23 @@
   .doc:hover { background: #1b212b; }
   .doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .doc-meta { color: #5f6b7d; font-size: 11px; white-space: nowrap; }
+  .doc input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+  .badge { font-size: 10.5px; border-radius: 999px; padding: 1px 7px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .badge.ready { color: #6ee7a8; border-color: #1f4d38; }
+  .badge.wait { color: #fbbf24; border-color: #4d3a14; }
+  .meter { margin: 4px 10px 8px; font-size: 11px; color: var(--muted); }
+  .meter .bar { height: 4px; background: #1b212b; border-radius: 4px; margin-top: 4px; overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; background: var(--accent); }
+  .privacy { margin: 2px 10px 8px; font-size: 11px; color: #5f6b7d; }
+  .scopehint { margin: 0 10px 6px; font-size: 11px; color: var(--muted); }
+  .suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px 44px; }
+  .suggest button { background: #121722; color: #c8cfdb; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+  .suggest button:hover { border-color: var(--accent); color: #fff; }
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: #2a1417; border: 1px solid #5c2328; color: #fecaca; padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 50; max-width: 90vw; }
+  .toast small { color: #fca5a5; opacity: .8; }
+  body.dragging::after { content: "Drop a PDF to add it to your private library"; position: fixed; inset: 0; background: rgba(11,13,18,.85); border: 3px dashed var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; z-index: 40; pointer-events: none; }
+  .exportlink { display: block; margin: 4px 14px 10px; font-size: 12px; color: var(--muted); text-decoration: none; }
+  .exportlink:hover { color: #fff; }
   .usedocs { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; cursor: pointer; user-select: none; }
   .sources { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
   .source { font-size: 11.5px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
@@ -213,9 +230,12 @@
 
   <div class="section">Chats</div>
   <div id="conversations"></div>
+  <a class="exportlink" id="exportMd" href="#" title="Download this chat as Markdown">&#8681; Export this chat (.md)</a>
 
   <div class="section">Documents</div>
+  <div class="privacy">&#128274; Your documents are private: only you can search or read them.</div>
   <div id="documents"><div class="empty">Loading…</div></div>
+  <div class="scopehint" id="scopeHint"></div>
 
   <div class="section">Memory</div>
   <div id="memories"></div>
@@ -276,9 +296,31 @@
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
-    if (!res.ok) throw new Error((data && (data.error || data.detail)) || ('HTTP ' + res.status));
+    if (!res.ok) throw new Error(friendly(res.status, data));
     return data;
   }
+
+  /** A short, friendly message plus the support reference (request id) when the server sent one. */
+  function friendly(status, data) {
+    const base = (data && (data.error || data.detail)) || ({
+      413: 'That file is too large.', 429: 'You are going a little fast. Please wait a minute.',
+      503: 'The service is busy. Please try again shortly.'
+    }[status]) || ('Something went wrong (HTTP ' + status + ').');
+    return data && data.requestId ? base + ' (ref ' + String(data.requestId).slice(0, 8) + ')' : base;
+  }
+
+  function toast(message) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.setAttribute('role', 'alert');
+    t.textContent = message;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 6000);
+  }
+
+  // Which documents a question is limited to (empty = all of them).
+  const scopeIds = new Set();
+  let limits = { maxBytes: 5000000, maxDocuments: 5 };
 
   // ---------------- conversations ----------------
   async function fetchConversations() {
@@ -400,13 +442,14 @@
     const res = await fetch('/api/conversations/' + conversationId + '/messages/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: text, useDocuments: document.getElementById('useDocs').checked })
+      body: JSON.stringify({ content: text, useDocuments: document.getElementById('useDocs').checked,
+                             documentIds: Array.from(scopeIds) })
     });
 
     if (res.status === 401) { location.href = '/login.html'; throw new Error('Not signed in'); }
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      throw new Error((body && body.error) || ('HTTP ' + res.status));
+      throw new Error(friendly(res.status, body));
     }
 
     const reader = res.body.getReader();
@@ -647,36 +690,77 @@
 
   attachBtn.addEventListener('click', () => fileInput.click());
 
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files[0];
+  fileInput.addEventListener('change', () => { uploadFile(fileInput.files[0]); fileInput.value = ''; });
+
+  // Drag and drop anywhere on the page.
+  let dragDepth = 0;
+  window.addEventListener('dragenter', e => { if (e.dataTransfer && e.dataTransfer.types.includes('Files')) { dragDepth++; document.body.classList.add('dragging'); } });
+  window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove('dragging'); });
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => {
+    e.preventDefault(); dragDepth = 0; document.body.classList.remove('dragging');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+  });
+
+  /** Checks the file in the browser first (saves a round trip); the server checks again. */
+  function precheck(file) {
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') return 'Only PDF files are supported.';
+    if (file.size > limits.maxBytes) return 'That file is larger than ' + Math.round(limits.maxBytes / 1e6) + ' MB.';
+    if (file.size === 0) return 'That file is empty.';
+    return null;
+  }
+
+  async function uploadFile(file) {
     if (!file) return;
+    const problem = precheck(file);
+    if (problem) { toast(problem); return; }
     attachBtn.disabled = true;
-    appendMessage('assistant', 'Reading **' + file.name + '** …');
+    appendMessage('assistant', 'Reading **' + file.name + '** … (parsing, then indexing)');
     try {
       const form = new FormData();
       form.append('file', file);
       const res = await fetch('/api/rag/upload', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        appendMessage('assistant', 'Could not add that file. ' + (data.error || ('HTTP ' + res.status)));
+        toast(friendly(res.status, data));
+        appendMessage('assistant', 'Could not add that file. ' + friendly(res.status, data));
       } else {
-        const preview = (data.preview || '').split('\n').map(line => '> ' + line).join('\n');
         appendMessage('assistant',
-          'Added **' + data.file + '** to your private library\n\n'
-          + '- pages: ' + data.pages + '\n'
-          + '- passages: ' + data.chunks + '\n\n'
-          + '"Use my documents" is now on, so answers cite this file.\n\n'
-          + 'Extracted text (start):\n\n' + preview);
+          'Added **' + data.file + '** to your private library (' + data.pages + ' pages, ' + data.chunks + ' passages). '
+          + '"Use my documents" is now on, so answers cite this file.');
         document.getElementById('useDocs').checked = true;
+        scopeIds.clear();
         await loadDocuments();
+        showSummary(data.id);
       }
     } catch (e) {
-      appendMessage('assistant', 'Upload failed: ' + e.message);
+      toast('Upload failed: ' + e.message);
     } finally {
       attachBtn.disabled = false;
-      fileInput.value = '';
     }
-  });
+  }
+
+  /** A short summary and three starter questions for a new document (one model call, then cached). */
+  async function showSummary(id) {
+    try {
+      const s = await api('/api/rag/documents/' + encodeURIComponent(id) + '/summary');
+      if (s.summary) appendMessage('assistant', '**Summary:** ' + s.summary);
+      if (s.questions && s.questions.length) {
+        const box = document.getElementById('messages');
+        const wrap = document.createElement('div');
+        wrap.className = 'suggest';
+        s.questions.forEach(q => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = q;
+          b.addEventListener('click', () => { wrap.remove(); sendMessage(q); });
+          wrap.appendChild(b);
+        });
+        box.appendChild(wrap);
+        box.scrollTop = box.scrollHeight;
+      }
+    } catch (e) { /* the summary is a bonus; the upload already worked */ }
+  }
 
   // ---------------- document library ----------------
   async function loadDocuments() {
@@ -684,21 +768,48 @@
     try {
       const data = await api('/api/rag/documents');
       const docs = data.documents || [];
+      if (data.limits) limits = data.limits;
+      for (const id of Array.from(scopeIds)) if (!docs.some(d => d.id === id)) scopeIds.delete(id);
+      const mine = docs.filter(d => d.canDelete).length;
+      const meter = `<div class="meter">${mine} of ${limits.maxDocuments} documents used
+        <div class="bar"><i style="width:${Math.min(100, mine / limits.maxDocuments * 100)}%"></i></div></div>`;
       if (!docs.length) {
-        el.innerHTML = '<div class="empty">No documents yet. Use the paperclip to add a PDF.</div>';
+        el.innerHTML = meter + '<div class="empty">No documents yet. Drag a PDF anywhere on this page, or use the paperclip.</div>';
+        updateScopeHint();
         return;
       }
-      el.innerHTML = docs.map(d => `
+      el.innerHTML = meter + docs.map(d => `
         <div class="doc" title="${esc(d.file)}">
+          <input type="checkbox" data-scope="${esc(d.id)}" aria-label="Limit questions to ${esc(d.file)}" ${scopeIds.has(d.id) ? 'checked' : ''}>
           <span class="doc-name">${esc(d.file)}</span>
-          <span class="doc-meta">${d.shared ? 'sample' : (d.pages ? d.pages + ' p' : '')}</span>
-          ${d.canDelete ? `<button class="del" data-reindex="${esc(d.id)}" title="Re-index">&#8635;</button>
-          <button class="del" data-deldoc="${esc(d.id)}" title="Delete">&times;</button>` : ''}
+          <span class="badge ${d.indexedAt ? 'ready' : 'wait'}">${d.shared ? 'sample' : (d.indexedAt ? 'Ready' : 'Indexing')}</span>
+          ${d.canDelete ? `<button class="del" data-reindex="${esc(d.id)}" title="Re-index" aria-label="Re-index">&#8635;</button>
+          <button class="del" data-deldoc="${esc(d.id)}" title="Delete" aria-label="Delete">&times;</button>` : ''}
         </div>`).join('');
+      updateScopeHint();
     } catch (e) {
-      el.innerHTML = '<div class="empty">Could not load documents.</div>';
+      el.innerHTML = '<div class="empty">Could not load documents. ' + esc(e.message) + '</div>';
     }
   }
+
+  function updateScopeHint() {
+    document.getElementById('scopeHint').textContent = scopeIds.size
+      ? 'Questions are limited to ' + scopeIds.size + ' selected document' + (scopeIds.size > 1 ? 's' : '') + '.'
+      : 'Tick documents to limit questions to them (none ticked = all).';
+  }
+
+  document.getElementById('documents').addEventListener('change', ev => {
+    const box = ev.target.closest('[data-scope]');
+    if (!box) return;
+    if (box.checked) scopeIds.add(box.dataset.scope); else scopeIds.delete(box.dataset.scope);
+    if (scopeIds.size) document.getElementById('useDocs').checked = true;
+    updateScopeHint();
+  });
+
+  document.getElementById('exportMd').addEventListener('click', ev => {
+    ev.preventDefault();
+    if (currentId) window.location.href = '/api/conversations/' + currentId + '/export.md';
+  });
 
   document.getElementById('documents').addEventListener('click', async ev => {
     const del = ev.target.closest('[data-deldoc]');
@@ -706,13 +817,13 @@
     try {
       if (del) {
         if (!confirm('Delete this document? Its passages are removed from search.')) return;
-        await fetch('/api/rag/documents/' + encodeURIComponent(del.dataset.deldoc), { method: 'DELETE' });
+        const r = await fetch('/api/rag/documents/' + encodeURIComponent(del.dataset.deldoc), { method: 'DELETE' });
+        if (!r.ok && r.status !== 404) toast(friendly(r.status, await r.json().catch(() => ({}))));
       } else if (re) {
         re.disabled = true;
         const res = await fetch('/api/rag/documents/' + encodeURIComponent(re.dataset.reindex) + '/reindex', { method: 'POST' });
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          alert(body.error || ('HTTP ' + res.status));
+          toast(friendly(res.status, await res.json().catch(() => ({}))));
         }
       } else {
         return;
