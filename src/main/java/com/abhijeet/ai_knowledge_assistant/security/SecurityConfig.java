@@ -74,7 +74,9 @@ public class SecurityConfig {
                         .frameOptions(frame -> frame.deny())
                         .addHeaderWriter(new StaticHeadersWriter("Permissions-Policy",
                                 "camera=(), geolocation=(), microphone=(self)")))
-                // JSON fetch calls from a single page; CSRF disabled for this demo.
+                // CSRF is still defended, without per-request tokens: the session cookie is SameSite=Lax
+                // and CrossSiteRequestFilter refuses state-changing requests whose Origin or
+                // Sec-Fetch-Site shows another site (see CrossSiteAndAuthLimitTest).
                 .csrf(csrf -> csrf.disable());
 
         // Only wire the OAuth2 login flow when a Google client is configured.
